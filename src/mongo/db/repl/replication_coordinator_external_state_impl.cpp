@@ -266,9 +266,14 @@ void ReplicationCoordinatorExternalStateImpl::startSteadyStateReplication(
     invariant(!_bgSync);
     _bgSync =
         std::make_unique<BackgroundSync>(replCoord, this, _replicationProcess, _oplogApplier.get());
+    _globalSync =
+        std::make_unique<GlobalSync>(replCoord, this, _replicationProcess, _oplogApplier.get());
 
     log() << "Starting replication fetcher thread";
     _bgSync->startup(opCtx);
+
+    log() << "Starting multi master fetcher thread";
+    _globalSync->startup(opCtx);
 
     log() << "Starting replication applier thread";
     _oplogApplierShutdownFuture = _oplogApplier->startup();

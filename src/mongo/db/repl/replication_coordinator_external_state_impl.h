@@ -33,6 +33,7 @@
 
 #include "mongo/base/disallow_copying.h"
 #include "mongo/db/concurrency/d_concurrency.h"
+#include "mongo/db/mm/global_sync.h"
 #include "mongo/db/repl/bgsync.h"
 #include "mongo/db/repl/oplog_applier.h"
 #include "mongo/db/repl/replication_coordinator_external_state.h"
@@ -177,6 +178,8 @@ private:
     // ReplicationCoordinator, but this ExternalState object is constructed prior to the
     // ReplicationCoordinator.
     std::unique_ptr<BackgroundSync> _bgSync;
+
+    std::unique_ptr<GlobalSync> _globalSync;
 
     // Thread running SyncSourceFeedback::run().
     std::unique_ptr<stdx::thread> _syncSourceFeedbackThread;
