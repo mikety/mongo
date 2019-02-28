@@ -36,8 +36,6 @@
 #include "mongo/db/jsobj.h"
 #include "mongo/db/mm/global_fetcher.h"
 #include "mongo/db/repl/data_replicator_external_state.h"
-#include "mongo/db/repl/oplog_applier.h"
-#include "mongo/db/repl/oplog_buffer.h"
 #include "mongo/db/repl/oplog_interface_remote.h"
 #include "mongo/db/repl/optime.h"
 #include "mongo/db/repl/rollback_impl.h"
@@ -85,9 +83,8 @@ public:
      * arguments. All these components must outlive the GlobalSync object.
      */
     GlobalSync(ReplicationCoordinator* replicationCoordinator,
-                   ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
-                   ReplicationProcess* replicationProcess,
-                   OplogApplier* oplogApplier);
+               ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
+               ReplicationProcess* replicationProcess);
 
     // stop syncing (when this node becomes a primary, e.g.)
     // During stepdown, the last fetched optime is not reset in order to keep track of the lastest
@@ -201,9 +198,6 @@ private:
     void start(OperationContext* opCtx);
 
     OpTime _readLastAppliedOpTime(OperationContext* opCtx);
-
-    // This OplogApplier applies oplog entries fetched from the sync source.
-    OplogApplier* const _oplogApplier;
 
     // A pointer to the replication coordinator running the show.
     ReplicationCoordinator* _replCoord;

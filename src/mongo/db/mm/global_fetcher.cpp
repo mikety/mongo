@@ -64,15 +64,6 @@ ServerStatusMetricField<Counter64> displayBytesRead("repl.network.bytes", &netwo
 
 const Milliseconds maximumAwaitDataTimeoutMS(30 * 1000);
 
-/**
- * Calculates await data timeout based on the current replica set configuration.
- */
-Milliseconds calculateAwaitDataTimeout(const ReplSetConfig& config) {
-    // Under protocol version 1, make the awaitData timeout (maxTimeMS) dependent on the election
-    // timeout. This enables the sync source to communicate liveness of the primary to secondaries.
-    // We never wait longer than 30 seconds.
-    return std::min((config.getElectionTimeoutPeriod() / 2), maximumAwaitDataTimeoutMS);
-}
 
 /**
  * Returns getMore command object suitable for tailing remote oplog.
@@ -140,11 +131,13 @@ Status checkRemoteOplogStart(const Fetcher::Documents& documents,
     // since that could cause it to not have our required minValid point. The cursor will be
     // killed if the upstream node rolls back so we don't need to keep checking once the cursor
     // is established.
+    /* POC
     if (remoteRBID && (*remoteRBID != requiredRBID)) {
         return Status(ErrorCodes::InvalidSyncSource,
                       "Upstream node rolled back after choosing it as a sync source. Choosing "
                       "new sync source.");
     }
+    */
 
     // Sometimes our remoteLastOpApplied may be stale; if we received a document with an
     // opTime later than remoteLastApplied, we can assume the remote is at least up to that
@@ -215,12 +208,14 @@ Status checkRemoteOplogStart(const Fetcher::Documents& documents,
                                     << ": "
                                     << opTimeResult.getStatus().toString());
     }
+    /* POC
     auto opTime = opTimeResult.getValue();
     if (opTime != lastFetched) {
         std::string message = str::stream() << "Our last optime fetched: " << lastFetched.toString()
                                             << ". source's GTE: " << opTime.toString();
         return Status(ErrorCodes::OplogStartMissing, message);
     }
+    */
     return Status::OK();
 }
 
@@ -310,18 +305,17 @@ StatusWith<GlobalFetcher::DocumentsInfo> GlobalFetcher::validateDocuments(
 }
 
 GlobalFetcher::GlobalFetcher(executor::TaskExecutor* executor,
-                           OpTime lastFetched,
-                           HostAndPort source,
-                           NamespaceString nss,
-                           ReplSetConfig config,
-                           std::size_t maxFetcherRestarts,
-                           int requiredRBID,
-                           bool requireFresherSyncSource,
-                           DataReplicatorExternalState* dataReplicatorExternalState,
-                           EnqueueDocumentsFn enqueueDocumentsFn,
-                           OnShutdownCallbackFn onShutdownCallbackFn,
-                           const int batchSize,
-                           StartingPoint startingPoint)
+                             OpTime lastFetched,
+                             HostAndPort source,
+                             NamespaceString nss,
+                             std::size_t maxFetcherRestarts,
+                             int requiredRBID,
+                             bool requireFresherSyncSource,
+                             DataReplicatorExternalState* dataReplicatorExternalState,
+                             EnqueueDocumentsFn enqueueDocumentsFn,
+                             OnShutdownCallbackFn onShutdownCallbackFn,
+                             const int batchSize,
+                             StartingPoint startingPoint)
     : AbstractOplogFetcher(executor,
                            lastFetched,
                            source,
@@ -334,11 +328,10 @@ GlobalFetcher::GlobalFetcher(executor::TaskExecutor* executor,
       _requireFresherSyncSource(requireFresherSyncSource),
       _dataReplicatorExternalState(dataReplicatorExternalState),
       _enqueueDocumentsFn(enqueueDocumentsFn),
-      _awaitDataTimeout(calculateAwaitDataTimeout(config)),
+      _awaitDataTimeout(maximumAwaitDataTimeoutMS),
       _batchSize(batchSize),
       _startingPoint(startingPoint) {
 
-    invariant(config.isInitialized());
     invariant(enqueueDocumentsFn);
 }
 
@@ -348,8 +341,8 @@ GlobalFetcher::~GlobalFetcher() {
 }
 
 BSONObj GlobalFetcher::_makeFindCommandObject(const NamespaceString& nss,
-                                             OpTime lastOpTimeFetched,
-                                             Milliseconds findMaxTime) const {
+                                              OpTime lastOpTimeFetched,
+                                              Milliseconds findMaxTime) const {
     auto lastCommittedWithCurrentTerm =
         _dataReplicatorExternalState->getCurrentTermAndLastCommittedOpTime();
     auto term = lastCommittedWithCurrentTerm.value;
@@ -394,6 +387,7 @@ StatusWith<BSONObj> GlobalFetcher::_onSuccessfulBatch(const Fetcher::QueryRespon
     const auto& documents = queryResponse.documents;
     auto firstDocToApply = documents.cbegin();
 
+    log() << "MultiMaster _onSuccessfulBatch 1";
     if (!documents.empty()) {
         LOG(2) << "oplog fetcher read " << documents.size()
                << " operations from remote oplog starting at " << documents.front()["ts"]
@@ -430,6 +424,7 @@ StatusWith<BSONObj> GlobalFetcher::_onSuccessfulBatch(const Fetcher::QueryRespon
             remoteRBID,
             _requireFresherSyncSource);
         if (!status.isOK()) {
+            log() << "MultiMaster _onSuccessfulBatch 2 status: " << status;
             // Stop oplog fetcher and execute rollback if necessary.
             return status;
         }
@@ -443,9 +438,11 @@ StatusWith<BSONObj> GlobalFetcher::_onSuccessfulBatch(const Fetcher::QueryRespon
         }
     }
 
-    auto validateResult =
-        GlobalFetcher::validateDocuments(documents, queryResponse.first, lastFetched.getTimestamp());
+    log() << "MultiMaster _onSuccessfulBatch 3 ";
+    auto validateResult = GlobalFetcher::validateDocuments(
+        documents, queryResponse.first, lastFetched.getTimestamp());
     if (!validateResult.isOK()) {
+        log() << "MultiMaster _onSuccessfulBatch 4 status " << validateResult.getStatus();
         return validateResult.getStatus();
     }
     auto info = validateResult.getValue();
@@ -478,6 +475,7 @@ StatusWith<BSONObj> GlobalFetcher::_onSuccessfulBatch(const Fetcher::QueryRespon
     // Record time for each batch.
     getmoreReplStats.recordMillis(durationCount<Milliseconds>(queryResponse.elapsedMillis));
 
+    log() << "MultiMaster _onSuccessfulBatch 5 ";
     // TODO: back pressure handling will be added in SERVER-23499.
     auto status = _enqueueDocumentsFn(firstDocToApply, documents.cend(), info);
     if (!status.isOK()) {

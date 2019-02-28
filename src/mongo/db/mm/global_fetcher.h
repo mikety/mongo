@@ -38,7 +38,6 @@
 #include "mongo/db/namespace_string.h"
 #include "mongo/db/repl/abstract_oplog_fetcher.h"
 #include "mongo/db/repl/data_replicator_external_state.h"
-#include "mongo/db/repl/repl_set_config.h"
 #include "mongo/stdx/functional.h"
 #include "mongo/util/fail_point_service.h"
 
@@ -121,18 +120,17 @@ public:
      * Invariants if validation fails on any of the provided arguments.
      */
     GlobalFetcher(executor::TaskExecutor* executor,
-                 OpTime lastFetched,
-                 HostAndPort source,
-                 NamespaceString nss,
-                 ReplSetConfig config,
-                 std::size_t maxFetcherRestarts,
-                 int requiredRBID,
-                 bool requireFresherSyncSource,
-                 DataReplicatorExternalState* dataReplicatorExternalState,
-                 EnqueueDocumentsFn enqueueDocumentsFn,
-                 OnShutdownCallbackFn onShutdownCallbackFn,
-                 const int batchSize,
-                 StartingPoint startingPoint = StartingPoint::kSkipFirstDoc);
+                  OpTime lastFetched,
+                  HostAndPort source,
+                  NamespaceString nss,
+                  std::size_t maxFetcherRestarts,
+                  int requiredRBID,
+                  bool requireFresherSyncSource,
+                  DataReplicatorExternalState* dataReplicatorExternalState,
+                  EnqueueDocumentsFn enqueueDocumentsFn,
+                  OnShutdownCallbackFn onShutdownCallbackFn,
+                  const int batchSize,
+                  StartingPoint startingPoint = StartingPoint::kSkipFirstDoc);
 
     virtual ~GlobalFetcher();
 

@@ -31,8 +31,10 @@
 
 #include "mongo/platform/basic.h"
 
-#include "mongo/db/mm/global_sync.h"
+#include <vector>
+
 #include "mongo/db/mm/global_fetcher.h"
+#include "mongo/db/mm/global_sync.h"
 
 #include "mongo/base/counter.h"
 #include "mongo/base/string_data.h"
@@ -43,7 +45,9 @@
 #include "mongo/db/commands/test_commands_enabled.h"
 #include "mongo/db/concurrency/replication_state_transition_lock_guard.h"
 #include "mongo/db/concurrency/write_conflict_exception.h"
+#include "mongo/db/dbdirectclient.h"
 #include "mongo/db/dbhelpers.h"
+#include "mongo/db/ops/write_ops.h"
 #include "mongo/db/repl/data_replicator_external_state_impl.h"
 #include "mongo/db/repl/oplog.h"
 #include "mongo/db/repl/oplog_interface_local.h"
@@ -58,6 +62,8 @@
 #include "mongo/db/server_parameters.h"
 #include "mongo/rpc/get_status_from_command_result.h"
 #include "mongo/rpc/metadata/repl_set_metadata.h"
+#include "mongo/s/write_ops/batched_command_request.h"
+#include "mongo/s/write_ops/batched_command_response.h"
 #include "mongo/stdx/memory.h"
 #include "mongo/util/log.h"
 #include "mongo/util/mongoutils/str.h"
@@ -75,30 +81,20 @@ const int kSmallBatchLimitBytes = 40000;
 const Milliseconds kRollbackOplogSocketTimeout(10 * 60 * 1000);
 // 16MB max batch size / 12 byte min doc size * 10 (for good measure) = defaultBatchSize to use.
 const auto defaultBatchSize = (16 * 1024 * 1024) / 12 * 10;
-
-// The batchSize to use for the find/getMore queries called by the GlobalFetcher
-MONGO_EXPORT_STARTUP_SERVER_PARAMETER(bgSyncOplogFetcherBatchSize, int, defaultBatchSize);
-
-// The batchSize to use for the find/getMore queries called by the rollback common point resolver.
-// A batchSize of 0 means that the 'find' and 'getMore' commands will be given no batchSize.
-// We set the default to 2000 to prevent the sync source from having to read too much data at once,
-// and reduce the chance of a socket timeout.
-// We choose 2000 for (10 minute timeout) * (60 sec / min) * (50 MB / second) / (16 MB / document).
 constexpr int defaultRollbackBatchSize = 2000;
-MONGO_EXPORT_SERVER_PARAMETER(rollbackRemoteOplogQueryBatchSize, int, defaultRollbackBatchSize)
-    ->withValidator([](const auto& potentialNewValue) {
-        if (potentialNewValue < 0) {
-            return Status(ErrorCodes::BadValue,
-                          "rollbackRemoteOplogQueryBatchSize cannot be negative.");
-        }
-
-        return Status::OK();
-    });
 
 // If 'forceRollbackViaRefetch' is true, always perform rollbacks via the refetch algorithm, even if
 // the storage engine supports rollback via recover to timestamp.
 constexpr bool forceRollbackViaRefetchByDefault = false;
-MONGO_EXPORT_SERVER_PARAMETER(forceRollbackViaRefetch, bool, forceRollbackViaRefetchByDefault);
+
+MONGO_EXPORT_STARTUP_SERVER_PARAMETER(testSourceRSPort, int, 20017)
+    ->withValidator([](const auto& potentialNewValue) {
+        if (potentialNewValue < 0) {
+            return Status(ErrorCodes::BadValue, "testSourceRSPort cannot be negative.");
+        }
+
+        return Status::OK();
+    });
 
 /**
  * Extends DataReplicatorExternalStateImpl to be member state aware.
@@ -108,27 +104,27 @@ public:
     DataReplicatorExternalStateGlobalSync(
         ReplicationCoordinator* replicationCoordinator,
         ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
-        GlobalSync* bgsync);
+        GlobalSync* globalSync);
     bool shouldStopFetching(const HostAndPort& source,
                             const rpc::ReplSetMetadata& replMetadata,
                             boost::optional<rpc::OplogQueryMetadata> oqMetadata) override;
 
 private:
-    GlobalSync* _bgsync;
+    GlobalSync* _globalSync;
 };
 
 DataReplicatorExternalStateGlobalSync::DataReplicatorExternalStateGlobalSync(
     ReplicationCoordinator* replicationCoordinator,
     ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
-    GlobalSync* bgsync)
+    GlobalSync* globalSync)
     : DataReplicatorExternalStateImpl(replicationCoordinator, replicationCoordinatorExternalState),
-      _bgsync(bgsync) {}
+      _globalSync(globalSync) {}
 
 bool DataReplicatorExternalStateGlobalSync::shouldStopFetching(
     const HostAndPort& source,
     const rpc::ReplSetMetadata& replMetadata,
     boost::optional<rpc::OplogQueryMetadata> oqMetadata) {
-    if (_bgsync->shouldStopFetching()) {
+    if (_globalSync->shouldStopFetching()) {
         return true;
     }
 
@@ -141,13 +137,10 @@ size_t getSize(const BSONObj& o) {
 }
 }  // namespace
 
-GlobalSync::GlobalSync(
-    ReplicationCoordinator* replicationCoordinator,
-    ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
-    ReplicationProcess* replicationProcess,
-    OplogApplier* oplogApplier)
-    : _oplogApplier(oplogApplier),
-      _replCoord(replicationCoordinator),
+GlobalSync::GlobalSync(ReplicationCoordinator* replicationCoordinator,
+                       ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
+                       ReplicationProcess* replicationProcess)
+    : _replCoord(replicationCoordinator),
       _replicationCoordinatorExternalState(replicationCoordinatorExternalState),
       _replicationProcess(replicationProcess) {}
 
@@ -190,7 +183,7 @@ bool GlobalSync::_inShutdown_inlock() const {
 }
 
 void GlobalSync::_run() {
-    Client::initThread("rsGlobalSync");
+    Client::initThread("GlobalSync");
     AuthorizationSession::get(cc())->grantInternalAuthorization();
 
     while (!inShutdown()) {
@@ -240,7 +233,7 @@ void GlobalSync::_runProducer() {
 void GlobalSync::_produce() {
     if (MONGO_FAIL_POINT(stopReplProducer)) {
         // This log output is used in js tests so please leave it.
-        log() << "bgsync - stopReplProducer fail point "
+        log() << "globalSync - stopReplProducer fail point "
                  "enabled. Blocking until fail point is disabled.";
 
         // TODO(SERVER-27120): Remove the return statement and uncomment the while loop.
@@ -253,11 +246,15 @@ void GlobalSync::_produce() {
         return;
     }
 
+    log() << "MultiMaster _produce 1";
+    _syncSourceHost = HostAndPort("localhost", testSourceRSPort);
     // this oplog reader does not do a handshake because we don't want the server it's syncing
     // from to track how far it has synced
     HostAndPort oldSource;
     OpTime lastOpTimeFetched;
     HostAndPort source;
+
+    /* POC
     SyncSourceResolverResponse syncSourceResp;
     {
         stdx::unique_lock<stdx::mutex> lock(_mutex);
@@ -421,7 +418,11 @@ void GlobalSync::_produce() {
                 opCtx.get(), _replCoord->getMyLastAppliedOpTime());
         }
     }
+    */
 
+    sleepsecs(1);
+    source = _syncSourceHost;
+    lastOpTimeFetched = _lastOpTimeFetched;
     // "lastFetched" not used. Already set in _enqueueDocuments.
     Status fetcherReturnStatus = Status::OK();
     DataReplicatorExternalStateGlobalSync dataReplicatorExternalState(
@@ -431,25 +432,26 @@ void GlobalSync::_produce() {
         auto onOplogFetcherShutdownCallbackFn = [&fetcherReturnStatus](const Status& status) {
             fetcherReturnStatus = status;
         };
-        // The construction of GlobalFetcher has to be outside bgsync mutex, because it calls
+        // The construction of GlobalFetcher has to be outside globalSync mutex, because it calls
         // replication coordinator.
         auto oplogFetcherPtr = stdx::make_unique<GlobalFetcher>(
             _replicationCoordinatorExternalState->getTaskExecutor(),
             lastOpTimeFetched,
             source,
             NamespaceString::kRsOplogNamespace,
-            _replCoord->getConfig(),
             _replicationCoordinatorExternalState->getOplogFetcherSteadyStateMaxFetcherRestarts(),
-            syncSourceResp.rbid,
-            true /* requireFresherSyncSource */,
+            // syncSourceResp.rbid,
+            0,
+            false /* requireFresherSyncSource */,
             &dataReplicatorExternalState,
             [this](const auto& a1, const auto& a2, const auto& a3) {
                 return this->_enqueueDocuments(a1, a2, a3);
             },
             onOplogFetcherShutdownCallbackFn,
-            bgSyncOplogFetcherBatchSize);
+            defaultBatchSize);
         stdx::lock_guard<stdx::mutex> lock(_mutex);
         if (_state != ProducerState::Running) {
+            log() << "MultiMaster producer state is not running";
             return;
         }
         _oplogFetcher = std::move(oplogFetcherPtr);
@@ -458,10 +460,11 @@ void GlobalSync::_produce() {
         fassertFailedWithStatus(51092, exceptionToStatus());
     }
 
-    const auto logLevel = getTestCommandsEnabled() ? 0 : 1;
-    LOG(logLevel) << "scheduling fetcher to read remote oplog on " << source << " starting at "
-                  << oplogFetcher->getFindQuery_forTest()["filter"];
+    log() << "MultiMaster _produce 2";
+    log() << "scheduling fetcher to read remote oplog on " << source << " starting at "
+          << oplogFetcher->getFindQuery_forTest()["filter"];
     auto scheduleStatus = oplogFetcher->startup();
+    log() << "MultiMaster _produce 3";
     if (!scheduleStatus.isOK()) {
         warning() << "unable to schedule fetcher to read remote oplog on " << source << ": "
                   << scheduleStatus;
@@ -469,8 +472,9 @@ void GlobalSync::_produce() {
     }
 
     oplogFetcher->join();
-    LOG(1) << "fetcher stopped reading remote oplog on " << source;
+    log() << "fetcher stopped reading remote oplog on " << source;
 
+    /*
     // If the background sync is stopped after the fetcher is started, we need to
     // re-evaluate our sync source and oplog common point.
     if (getState() != ProducerState::Running) {
@@ -502,22 +506,53 @@ void GlobalSync::_produce() {
         warning() << "Fetcher stopped querying remote oplog with error: "
                   << redact(fetcherReturnStatus);
     }
+    */
 }
 
 Status GlobalSync::_enqueueDocuments(Fetcher::Documents::const_iterator begin,
-                                         Fetcher::Documents::const_iterator end,
-                                         const GlobalFetcher::DocumentsInfo& info) {
+                                     Fetcher::Documents::const_iterator end,
+                                     const GlobalFetcher::DocumentsInfo& info) {
     // If this is the first batch of operations returned from the query, "toApplyDocumentCount" will
     // be one fewer than "networkDocumentCount" because the first document (which was applied
     // previously) is skipped.
+    log() << "MultiMaster _enqueueDocuments 1";
     if (info.toApplyDocumentCount == 0) {
+        log() << "MultiMaster _enqueueDocuments 2 no documents to apply";
         return Status::OK();  // Nothing to do.
     }
 
     auto opCtx = cc().makeOperationContext();
+    // POC: oplog.global must be capped!
+    NamespaceString nss("local.oplog_global");
+    // insert documents to the local.oplog_global
+    DBDirectClient client(opCtx.get());
+    std::vector<BSONObj> docs;
 
-    // Wait for enough space.
-    _oplogApplier->getBuffer()->waitForSpace(opCtx.get(), info.toApplyDocumentBytes);
+    for (auto iDoc = begin; iDoc != end; ++iDoc) {
+        log() << "MultiMaster _enqueueDocuments adding doc " << *iDoc;
+        docs.emplace_back([&] {
+            BSONObjBuilder newDoc;
+            newDoc.append("_gid", "instance_1");
+            newDoc.appendElements(*iDoc);
+            return newDoc.obj();
+        }());
+    }
+
+    BatchedCommandRequest request([&] {
+        write_ops::Insert insertOp(nss);
+        insertOp.setDocuments(docs);
+        return insertOp;
+    }());
+
+    const BSONObj cmd = request.toBSON();
+    BSONObj res;
+
+    log() << "MultiMaster _enqueueDocuments Running command: " << cmd;
+    if (!client.runCommand(nss.db().toString(), cmd, res)) {
+        log() << "MultiMaster _enqueueDocuments error running command: " << res;
+        return getStatusFromCommandResult(res);
+    }
+    log() << "MultiMaster _enqueueDocuments Running command: OK";
 
     {
         // Don't add more to the buffer if we are in shutdown. Continue holding the lock until we
@@ -528,9 +563,6 @@ Status GlobalSync::_enqueueDocuments(Fetcher::Documents::const_iterator begin,
         if (_state != ProducerState::Running) {
             return Status::OK();
         }
-
-        // Buffer docs for later application.
-        _oplogApplier->enqueue(opCtx.get(), begin, end);
 
         // Update last fetched info.
         _lastOpTimeFetched = info.lastDocument;
@@ -548,14 +580,15 @@ Status GlobalSync::_enqueueDocuments(Fetcher::Documents::const_iterator begin,
         sleepmillis(kSleepToAllowBatchingMillis);
     }
 
+    log() << "MultiMaster _enqueueDocuments Finished OK";
     return Status::OK();
 }
 
 void GlobalSync::_runRollback(OperationContext* opCtx,
-                                  const Status& fetcherReturnStatus,
-                                  const HostAndPort& source,
-                                  int requiredRBID,
-                                  StorageInterface* storageInterface) {
+                              const Status& fetcherReturnStatus,
+                              const HostAndPort& source,
+                              int requiredRBID,
+                              StorageInterface* storageInterface) {
     if (_replCoord->getMemberState().primary()) {
         warning() << "Rollback situation detected in catch-up mode. Aborting catch-up mode.";
         _replCoord->abortCatchupIfNeeded().transitional_ignore();
@@ -613,7 +646,7 @@ void GlobalSync::_runRollback(OperationContext* opCtx,
     storageInterface->waitForAllEarlierOplogWritesToBeVisible(opCtx);
 
     auto storageEngine = opCtx->getServiceContext()->getStorageEngine();
-    if (!forceRollbackViaRefetch.load() && storageEngine->supportsRecoverToStableTimestamp()) {
+    if (!forceRollbackViaRefetchByDefault && storageEngine->supportsRecoverToStableTimestamp()) {
         log() << "Rollback using 'recoverToStableTimestamp' method.";
         _runRollbackViaRecoverToCheckpoint(
             opCtx, source, &localOplog, storageInterface, getConnection);
@@ -634,10 +667,8 @@ void GlobalSync::_runRollbackViaRecoverToCheckpoint(
     StorageInterface* storageInterface,
     OplogInterfaceRemote::GetConnectionFn getConnection) {
 
-    OplogInterfaceRemote remoteOplog(source,
-                                     getConnection,
-                                     NamespaceString::kRsOplogNamespace.ns(),
-                                     rollbackRemoteOplogQueryBatchSize.load());
+    OplogInterfaceRemote remoteOplog(
+        source, getConnection, NamespaceString::kRsOplogNamespace.ns(), defaultRollbackBatchSize);
 
     {
         stdx::lock_guard<stdx::mutex> lock(_mutex);
@@ -668,10 +699,8 @@ void GlobalSync::_fallBackOnRollbackViaRefetch(
     OplogInterface* localOplog,
     OplogInterfaceRemote::GetConnectionFn getConnection) {
 
-    RollbackSourceImpl rollbackSource(getConnection,
-                                      source,
-                                      NamespaceString::kRsOplogNamespace.ns(),
-                                      rollbackRemoteOplogQueryBatchSize.load());
+    RollbackSourceImpl rollbackSource(
+        getConnection, source, NamespaceString::kRsOplogNamespace.ns(), defaultRollbackBatchSize);
 
     rollback(opCtx, *localOplog, rollbackSource, requiredRBID, _replCoord, _replicationProcess);
 }
@@ -695,9 +724,8 @@ void GlobalSync::stop(bool resetLastFetchedOptime) {
 
     _syncSourceHost = HostAndPort();
     if (resetLastFetchedOptime) {
-        invariant(_oplogApplier->getBuffer()->isEmpty());
         _lastOpTimeFetched = OpTime();
-        log() << "Resetting last fetched optimes in bgsync";
+        log() << "Resetting last fetched optimes in globalSync";
     }
 
     if (_syncSourceResolver) {
@@ -723,24 +751,19 @@ void GlobalSync::start(OperationContext* opCtx) {
         if (_state != ProducerState::Starting) {
             return;
         }
-        // If a node steps down during drain mode, then the buffer may not be empty at the beginning
-        // of secondary state.
-        if (!_oplogApplier->getBuffer()->isEmpty()) {
-            log() << "going to start syncing, but buffer is not empty";
-        }
         _state = ProducerState::Running;
 
         // When a node steps down during drain mode, the last fetched optime would be newer than
         // the last applied.
         if (_lastOpTimeFetched <= lastAppliedOpTime) {
-            LOG(1) << "Setting bgsync _lastOpTimeFetched=" << lastAppliedOpTime
+            LOG(1) << "Setting globalSync _lastOpTimeFetched=" << lastAppliedOpTime
                    << ". Previous _lastOpTimeFetched: " << _lastOpTimeFetched;
             _lastOpTimeFetched = lastAppliedOpTime;
         }
         // Reload the last applied optime from disk if it has been changed.
     } while (lastAppliedOpTime != _replCoord->getMyLastAppliedOpTime());
 
-    LOG(1) << "bgsync fetch queue set to: " << _lastOpTimeFetched;
+    LOG(1) << "globalSync fetch queue set to: " << _lastOpTimeFetched;
 }
 
 OpTime GlobalSync::_readLastAppliedOpTime(OperationContext* opCtx) {
@@ -766,7 +789,8 @@ OpTime GlobalSync::_readLastAppliedOpTime(OperationContext* opCtx) {
     }
 
     OplogEntry parsedEntry(oplogEntry);
-    LOG(1) << "Successfully read last entry of oplog while starting bgsync: " << redact(oplogEntry);
+    LOG(1) << "Successfully read last entry of oplog while starting globalSync: "
+           << redact(oplogEntry);
     return parsedEntry.getOpTime();
 }
 
