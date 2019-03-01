@@ -67,11 +67,24 @@
 #include "mongo/stdx/memory.h"
 #include "mongo/util/log.h"
 #include "mongo/util/mongoutils/str.h"
+#include "mongo/util/net/socket_utils.h"
 #include "mongo/util/time_support.h"
 
 namespace mongo {
 
 using std::string;
+
+MONGO_EXPORT_STARTUP_SERVER_PARAMETER(isMongodWithGlobalSync, bool, false);
+MONGO_EXPORT_STARTUP_SERVER_PARAMETER(isMongoG, bool, false);
+
+MONGO_EXPORT_STARTUP_SERVER_PARAMETER(testSourceRSPort, int, 20017)
+    ->withValidator([](const auto& potentialNewValue) {
+        if (potentialNewValue < 0) {
+            return Status(ErrorCodes::BadValue, "testSourceRSPort cannot be negative.");
+        }
+
+        return Status::OK();
+    });
 
 namespace repl {
 
@@ -87,14 +100,10 @@ constexpr int defaultRollbackBatchSize = 2000;
 // the storage engine supports rollback via recover to timestamp.
 constexpr bool forceRollbackViaRefetchByDefault = false;
 
-MONGO_EXPORT_STARTUP_SERVER_PARAMETER(testSourceRSPort, int, 20017)
-    ->withValidator([](const auto& potentialNewValue) {
-        if (potentialNewValue < 0) {
-            return Status(ErrorCodes::BadValue, "testSourceRSPort cannot be negative.");
-        }
-
-        return Status::OK();
-    });
+std::string constructInstanceId() {
+    std::string hostName = getHostNameCached();
+    return str::stream() << hostName << ":" << serverGlobalParams.port;
+}
 
 /**
  * Extends DataReplicatorExternalStateImpl to be member state aware.
@@ -515,6 +524,8 @@ Status GlobalSync::_enqueueDocuments(Fetcher::Documents::const_iterator begin,
     // If this is the first batch of operations returned from the query, "toApplyDocumentCount" will
     // be one fewer than "networkDocumentCount" because the first document (which was applied
     // previously) is skipped.
+    string instanceId = constructInstanceId();
+
     log() << "MultiMaster _enqueueDocuments 1";
     if (info.toApplyDocumentCount == 0) {
         log() << "MultiMaster _enqueueDocuments 2 no documents to apply";
@@ -526,33 +537,58 @@ Status GlobalSync::_enqueueDocuments(Fetcher::Documents::const_iterator begin,
     NamespaceString nss("local.oplog_global");
     // insert documents to the local.oplog_global
     DBDirectClient client(opCtx.get());
-    std::vector<BSONObj> docs;
 
-    for (auto iDoc = begin; iDoc != end; ++iDoc) {
-        log() << "MultiMaster _enqueueDocuments adding doc " << *iDoc;
-        docs.emplace_back([&] {
-            BSONObjBuilder newDoc;
-            newDoc.append("_gid", "instance_1");
-            newDoc.appendElements(*iDoc);
-            return newDoc.obj();
+    if (isMongoG) {
+        std::vector<BSONObj> docs;
+
+        for (auto iDoc = begin; iDoc != end; ++iDoc) {
+            log() << "MultiMaster mongoG _enqueueDocuments adding doc " << *iDoc;
+            docs.emplace_back([&] {
+                BSONObjBuilder newDoc;
+                newDoc.append("_gid", instanceId);
+                newDoc.appendElements(*iDoc);
+                return newDoc.obj();
+            }());
+        }
+
+        invariant(!isMongodWithGlobalSync);
+        BatchedCommandRequest request([&] {
+            write_ops::Insert insertOp(nss);
+            insertOp.setDocuments(docs);
+            return insertOp;
         }());
+
+        const BSONObj cmd = request.toBSON();
+        BSONObj res;
+
+        log() << "MultiMaster mongoG _enqueueDocuments Running command: " << cmd;
+        if (!client.runCommand(nss.db().toString(), cmd, res)) {
+            log() << "MultiMaster mongoG _enqueueDocuments error running command: " << res;
+            return getStatusFromCommandResult(res);
+        }
+        log() << "MultiMaster _enqueueDocuments Running command: OK";
+    } else {
+        invariant(isMongodWithGlobalSync);
+        BSONObjBuilder applyOpsBuilder;
+        BSONArrayBuilder opsArray(applyOpsBuilder.subarrayStart("applyOps"_sd));
+        for (auto iDoc = begin; iDoc != end; ++iDoc) {
+            log() << "MultiMaster monogD _enqueueDocuments adding doc " << *iDoc;
+            opsArray.append(*iDoc);
+        }
+        opsArray.done();
+        applyOpsBuilder.append("allowAtomic", false);
+
+        const auto cmd = applyOpsBuilder.done();
+        const NamespaceString cmdNss{"admin", "$cmd"};
+        BSONObj res;
+
+        log() << "MultiMaster mongoD _enqueueDocuments Running command: " << cmd;
+        if (!client.runCommand(cmdNss.db().toString(), cmd, res)) {
+            log() << "MultiMaster mongoD _enqueueDocuments error running command: " << res;
+            return getStatusFromCommandResult(res);
+        }
+        log() << "MultiMaster _enqueueDocuments Running command: OK";
     }
-
-    BatchedCommandRequest request([&] {
-        write_ops::Insert insertOp(nss);
-        insertOp.setDocuments(docs);
-        return insertOp;
-    }());
-
-    const BSONObj cmd = request.toBSON();
-    BSONObj res;
-
-    log() << "MultiMaster _enqueueDocuments Running command: " << cmd;
-    if (!client.runCommand(nss.db().toString(), cmd, res)) {
-        log() << "MultiMaster _enqueueDocuments error running command: " << res;
-        return getStatusFromCommandResult(res);
-    }
-    log() << "MultiMaster _enqueueDocuments Running command: OK";
 
     {
         // Don't add more to the buffer if we are in shutdown. Continue holding the lock until we

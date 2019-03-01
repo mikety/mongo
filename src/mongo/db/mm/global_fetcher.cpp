@@ -37,14 +37,18 @@
 #include "mongo/db/commands/server_status_metric.h"
 #include "mongo/db/jsobj.h"
 #include "mongo/db/repl/replication_coordinator.h"
+#include "mongo/db/server_parameters.h"
 #include "mongo/db/stats/timer_stats.h"
 #include "mongo/rpc/metadata/oplog_query_metadata.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/fail_point_service.h"
 #include "mongo/util/log.h"
+#include "mongo/util/net/socket_utils.h"
 #include "mongo/util/time_support.h"
 
 namespace mongo {
+extern const bool isMongodWithGlobalSync;
+
 namespace repl {
 
 Seconds GlobalFetcher::kDefaultProtocolZeroAwaitDataTimeout(2);
@@ -243,6 +247,12 @@ StatusWith<boost::optional<rpc::OplogQueryMetadata>> parseOplogQueryMetadata(
     }
     return oqMetadata;
 }
+
+std::string constructInstanceId() {
+    std::string hostName = getHostNameCached();
+    return str::stream() << hostName << ":" << serverGlobalParams.port;
+}
+
 }  // namespace
 
 StatusWith<GlobalFetcher::DocumentsInfo> GlobalFetcher::validateDocuments(
@@ -347,23 +357,52 @@ BSONObj GlobalFetcher::_makeFindCommandObject(const NamespaceString& nss,
         _dataReplicatorExternalState->getCurrentTermAndLastCommittedOpTime();
     auto term = lastCommittedWithCurrentTerm.value;
     BSONObjBuilder cmdBob;
-    cmdBob.append("find", nss.coll());
-    cmdBob.append("filter", BSON("ts" << BSON("$gte" << lastOpTimeFetched.getTimestamp())));
-    cmdBob.append("tailable", true);
-    cmdBob.append("oplogReplay", true);
-    cmdBob.append("awaitData", true);
-    cmdBob.append("maxTimeMS", durationCount<Milliseconds>(findMaxTime));
-    cmdBob.append("batchSize", _batchSize);
+    if (isMongodWithGlobalSync) {
+        NamespaceString globalNss("local.oplog_global");
+        auto instanceId = constructInstanceId();
 
-    if (term != OpTime::kUninitializedTerm) {
-        cmdBob.append("term", term);
+        cmdBob.append("find", globalNss.coll());
+        cmdBob.append("filter",
+                      BSON("ts" << BSON("$gte" << lastOpTimeFetched.getTimestamp()) << "_gid"
+                                << BSON("$ne" << instanceId)));
+        cmdBob.append("projection", BSON("_id" << 0 << "_gid" << 0 << "ui" << 0));
+        // cmdBob.append("tailable", true);
+        // cmdBob.append("oplogReplay", true);
+        // cmdBob.append("awaitData", true);
+        cmdBob.append("maxTimeMS", durationCount<Milliseconds>(findMaxTime));
+        cmdBob.append("batchSize", _batchSize);
+
+        if (term != OpTime::kUninitializedTerm) {
+            cmdBob.append("term", term);
+        }
+
+        // This ensures that the sync source never returns an empty batch of documents for the first
+        // set
+        // of results.
+        // POC cmdBob.append("readConcern", BSON("afterClusterTime" <<
+        // lastOpTimeFetched.getTimestamp()));
+    } else {
+        cmdBob.append("find", nss.coll());
+        cmdBob.append("filter", BSON("ts" << BSON("$gte" << lastOpTimeFetched.getTimestamp())));
+        cmdBob.append("tailable", true);
+        cmdBob.append("oplogReplay", true);
+        cmdBob.append("awaitData", true);
+        cmdBob.append("maxTimeMS", durationCount<Milliseconds>(findMaxTime));
+        cmdBob.append("batchSize", _batchSize);
+
+        if (term != OpTime::kUninitializedTerm) {
+            cmdBob.append("term", term);
+        }
+
+        // This ensures that the sync source never returns an empty batch of documents for the first
+        // set
+        // of results.
+        cmdBob.append("readConcern", BSON("afterClusterTime" << lastOpTimeFetched.getTimestamp()));
     }
 
-    // This ensures that the sync source never returns an empty batch of documents for the first set
-    // of results.
-    cmdBob.append("readConcern", BSON("afterClusterTime" << lastOpTimeFetched.getTimestamp()));
-
-    return cmdBob.obj();
+    auto cmdToFind = cmdBob.obj();
+    log() << "MultiMaster _makeFindCommandObject: " << cmdToFind;
+    return cmdToFind;
 }
 
 BSONObj GlobalFetcher::_makeMetadataObject() const {
@@ -424,9 +463,11 @@ StatusWith<BSONObj> GlobalFetcher::_onSuccessfulBatch(const Fetcher::QueryRespon
             remoteRBID,
             _requireFresherSyncSource);
         if (!status.isOK()) {
-            log() << "MultiMaster _onSuccessfulBatch 2 status: " << status;
             // Stop oplog fetcher and execute rollback if necessary.
-            return status;
+            if (!isMongodWithGlobalSync) {  // POC disabled filter to query after cluster time
+                log() << "MultiMaster _onSuccessfulBatch 2 status: " << status;
+                return status;
+            }
         }
 
         LOG(1) << "oplog fetcher successfully fetched from " << _getSource();
