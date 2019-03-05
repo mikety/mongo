@@ -133,6 +133,7 @@ public:
             std::unique_ptr<RemoteCommandRetryScheduler::RetryPolicy> firstCommandRetryPolicy =
                 RemoteCommandRetryScheduler::makeNoRetryPolicy());
 
+    // TODO - consider using
     virtual ~Fetcher();
 
     /**

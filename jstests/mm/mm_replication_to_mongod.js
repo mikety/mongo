@@ -9,8 +9,7 @@
     const replTestSource = new ReplSetTest({
         name: "source_rs",
         nodes: [{}, {rsConfig: {priority: 0}}],
-        nodeOptions: {enableMajorityReadConcern: 'true',
-                      binVersion: "last-stable"}
+        nodeOptions: {enableMajorityReadConcern: 'true', binVersion: "last-stable"}
     });
     replTestSource.startSet();
     replTestSource.initiate();
@@ -27,32 +26,30 @@
 
     const mongog = new ReplSetTest({
         name: "mongog_rs",
-        nodes: [
-            {setParameter: {
-               isMongoG: true,
-               testSourceRSPort: replTestSource.getPrimary().port}}],
+        nodes:
+            [{setParameter: {isMongoG: true, testSourceRSPort: replTestSource.getPrimary().port}}],
         nodeOptions: {}
     });
     mongog.startSet();
     mongog.initiate();
-    mongog.getPrimary().getDB("test").setLogLevel(2); 
-    
+    mongog.getPrimary().getDB("test").setLogLevel(2);
+
     jsTestLog(" started MongoG replicaset");
 
     const mongo_dest = new ReplSetTest({
         name: "dest_rs",
-        nodes: [
-            {setParameter: {
-               isMongodWithGlobalSync: true,
-               testSourceRSPort: mongog.getPrimary().port}}],
+        nodes: [{
+            setParameter:
+                {isMongodWithGlobalSync: true, testSourceRSPort: mongog.getPrimary().port}
+        }],
         nodeOptions: {}
     });
     mongo_dest.startSet();
     mongo_dest.initiate();
-    mongo_dest.getPrimary().getDB("test").setLogLevel(2); 
+    mongo_dest.getPrimary().getDB("test").setLogLevel(2);
     let destColl = mongo_dest.getPrimary().getDB(dbName)[collName];
     assert.commandWorked(destColl.insert({_id: 0}, {writeConcern: {w: "majority"}}));
-    
+
     jsTestLog(" started dest replicaset");
     // Insert a document on primary and let it majority commit.
     sleep(1000);
@@ -61,7 +58,7 @@
     assert.eq(res.n, 0);
 
     const nDocs = 10;
-    for (let i=1; i<=nDocs; ++i) {
+    for (let i = 1; i <= nDocs; ++i) {
         assert.commandWorked(primaryColl.insert({_id: i}, {writeConcern: {w: "majority"}}));
     }
     sleep(1000);

@@ -47,6 +47,7 @@
 #include "mongo/db/concurrency/write_conflict_exception.h"
 #include "mongo/db/dbdirectclient.h"
 #include "mongo/db/dbhelpers.h"
+#include "mongo/db/logical_clock.h"
 #include "mongo/db/ops/write_ops.h"
 #include "mongo/db/repl/data_replicator_external_state_impl.h"
 #include "mongo/db/repl/oplog.h"
@@ -77,14 +78,10 @@ using std::string;
 MONGO_EXPORT_STARTUP_SERVER_PARAMETER(isMongodWithGlobalSync, bool, false);
 MONGO_EXPORT_STARTUP_SERVER_PARAMETER(isMongoG, bool, false);
 
-MONGO_EXPORT_STARTUP_SERVER_PARAMETER(testSourceRSPort, int, 20017)
-    ->withValidator([](const auto& potentialNewValue) {
-        if (potentialNewValue < 0) {
-            return Status(ErrorCodes::BadValue, "testSourceRSPort cannot be negative.");
-        }
-
-        return Status::OK();
-    });
+MONGO_EXPORT_SERVER_PARAMETER(mmPortConfig, int, 20017);
+MONGO_EXPORT_SERVER_PARAMETER(mmPort1, int, 20017);
+MONGO_EXPORT_SERVER_PARAMETER(mmPort2, int, 20017);
+MONGO_EXPORT_SERVER_PARAMETER(mmPort3, int, 20017);
 
 namespace repl {
 
@@ -100,11 +97,41 @@ constexpr int defaultRollbackBatchSize = 2000;
 // the storage engine supports rollback via recover to timestamp.
 constexpr bool forceRollbackViaRefetchByDefault = false;
 
-std::string constructInstanceId() {
-    std::string hostName = getHostNameCached();
-    return str::stream() << hostName << ":" << serverGlobalParams.port;
+static int CurrentSyncSourcePort = 20017;
+
+void computeCurrentSyncSourcePort() {
+    static int cur = -1;
+
+    if (isMongodWithGlobalSync) {
+        CurrentSyncSourcePort = mmPortConfig.load();
+        log() << "MultiMaster Computed CurrentSyncSource for MM Shard: " << CurrentSyncSourcePort;
+        return;
+    }
+
+    ++cur;
+
+    invariant(isMongoG);
+
+    switch (cur % 3) {
+        case 0:
+            CurrentSyncSourcePort = mmPort1.load();
+            break;
+
+        case 1:
+            CurrentSyncSourcePort = mmPort2.load();
+            break;
+
+        case 2:
+            CurrentSyncSourcePort = mmPort3.load();
+            break;
+    }
+    log() << "MultiMaster Computed CurrentSyncSource " << CurrentSyncSourcePort;
 }
 
+std::string computeInstanceId() {
+    std::string hostName = getHostNameCached();
+    return str::stream() << hostName << ":" << CurrentSyncSourcePort;
+}
 /**
  * Extends DataReplicatorExternalStateImpl to be member state aware.
  */
@@ -235,6 +262,8 @@ void GlobalSync::_runProducer() {
         if (getState() == ProducerState::Starting) {
             start(opCtx.get());
         }
+        // POC hack
+        computeCurrentSyncSourcePort();
     }
     _produce();
 }
@@ -255,8 +284,8 @@ void GlobalSync::_produce() {
         return;
     }
 
-    log() << "MultiMaster _produce 1";
-    _syncSourceHost = HostAndPort("localhost", testSourceRSPort);
+    _syncSourceHost = HostAndPort("localhost", CurrentSyncSourcePort);
+    log() << "MultiMaster _produce 1 using sync source " << _syncSourceHost;
     // this oplog reader does not do a handshake because we don't want the server it's syncing
     // from to track how far it has synced
     HostAndPort oldSource;
@@ -429,7 +458,7 @@ void GlobalSync::_produce() {
     }
     */
 
-    sleepsecs(1);
+    mongo::sleepsecs(1);
     source = _syncSourceHost;
     lastOpTimeFetched = _lastOpTimeFetched;
     // "lastFetched" not used. Already set in _enqueueDocuments.
@@ -524,7 +553,7 @@ Status GlobalSync::_enqueueDocuments(Fetcher::Documents::const_iterator begin,
     // If this is the first batch of operations returned from the query, "toApplyDocumentCount" will
     // be one fewer than "networkDocumentCount" because the first document (which was applied
     // previously) is skipped.
-    string instanceId = constructInstanceId();
+    std::string instanceId = computeInstanceId();
 
     log() << "MultiMaster _enqueueDocuments 1";
     if (info.toApplyDocumentCount == 0) {
@@ -546,6 +575,8 @@ Status GlobalSync::_enqueueDocuments(Fetcher::Documents::const_iterator begin,
             docs.emplace_back([&] {
                 BSONObjBuilder newDoc;
                 newDoc.append("_gid", instanceId);
+                newDoc.append("_lastMod",
+                              LogicalClock::get(opCtx.get())->getClusterTime().asTimestamp());
                 newDoc.appendElements(*iDoc);
                 return newDoc.obj();
             }());

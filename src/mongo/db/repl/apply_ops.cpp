@@ -109,10 +109,12 @@ Status _applyOps(OperationContext* opCtx,
     *numApplied = 0;
     int errors = 0;
 
+    log() << "MultiMaster _applyOps 1";
     BSONArrayBuilder ab;
     const auto& alwaysUpsert = info.getAlwaysUpsert();
     const bool haveWrappingWUOW = opCtx->lockState()->inAWriteUnitOfWork();
 
+    log() << "MultiMaster _applyOps 2";
     // Apply each op in the given 'applyOps' command object.
     for (const auto& opObj : ops) {
         // Ignore 'n' operations.
@@ -274,6 +276,7 @@ Status _applyOps(OperationContext* opCtx,
         return Status(ErrorCodes::UnknownError, "applyOps had one or more errors applying ops");
     }
 
+    log() << "MultiMaster _applyOps 3";
     return Status::OK();
 }
 
@@ -499,6 +502,26 @@ Status applyOps(OperationContext* opCtx,
         }
     }
 
+    {
+        log() << "MultiMaster hacking applyOps " << applyOpCmd;
+        {
+            repl::UnreplicatedWritesBlock uwb(opCtx);
+            auto status = _applyOps(opCtx,
+                                    dbName,
+                                    applyOpCmd,
+                                    info,
+                                    oplogApplicationMode,
+                                    result,
+                                    &numApplied,
+                                    nullptr);
+            log() << "MultiMaster hacking applyOps status: " << status;
+        }
+        auto opObserver = getGlobalServiceContext()->getOpObserver();
+        invariant(opObserver);
+        opObserver->onApplyOps(opCtx, dbName, applyOpCmd);
+        return Status::OK();
+    }
+
     if (!info.isAtomic()) {
         return _applyOps(
             opCtx, dbName, applyOpCmd, info, oplogApplicationMode, result, &numApplied, nullptr);
@@ -561,6 +584,7 @@ Status applyOps(OperationContext* opCtx,
     } catch (const DBException& ex) {
         if (ex.code() == ErrorCodes::AtomicityFailure) {
             // Retry in non-atomic mode.
+            log() << "MultiMaster applyOps exeception: " << ex.toString();
             return _applyOps(opCtx,
                              dbName,
                              applyOpCmd,

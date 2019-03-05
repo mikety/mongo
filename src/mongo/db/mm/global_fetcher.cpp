@@ -357,6 +357,7 @@ BSONObj GlobalFetcher::_makeFindCommandObject(const NamespaceString& nss,
         _dataReplicatorExternalState->getCurrentTermAndLastCommittedOpTime();
     auto term = lastCommittedWithCurrentTerm.value;
     BSONObjBuilder cmdBob;
+    StringData mmCollName = "mm_replication.MultiMasterCollection";
     if (isMongodWithGlobalSync) {
         NamespaceString globalNss("local.oplog_global");
         auto instanceId = constructInstanceId();
@@ -365,10 +366,10 @@ BSONObj GlobalFetcher::_makeFindCommandObject(const NamespaceString& nss,
         cmdBob.append("filter",
                       BSON("ts" << BSON("$gte" << lastOpTimeFetched.getTimestamp()) << "_gid"
                                 << BSON("$ne" << instanceId)));
-        cmdBob.append("projection", BSON("_id" << 0 << "_gid" << 0 << "ui" << 0));
-        // cmdBob.append("tailable", true);
+        cmdBob.append("projection", BSON("_id" << 0 << "ui" << 0));
+        cmdBob.append("tailable", true);
         // cmdBob.append("oplogReplay", true);
-        // cmdBob.append("awaitData", true);
+        cmdBob.append("awaitData", true);
         cmdBob.append("maxTimeMS", durationCount<Milliseconds>(findMaxTime));
         cmdBob.append("batchSize", _batchSize);
 
@@ -383,7 +384,11 @@ BSONObj GlobalFetcher::_makeFindCommandObject(const NamespaceString& nss,
         // lastOpTimeFetched.getTimestamp()));
     } else {
         cmdBob.append("find", nss.coll());
-        cmdBob.append("filter", BSON("ts" << BSON("$gte" << lastOpTimeFetched.getTimestamp())));
+        cmdBob.append("filter",
+                      BSON("ts" << BSON("$gte" << lastOpTimeFetched.getTimestamp()) << "_gid"
+                                << BSON("$exists" << false)
+                                << "ns"
+                                << mmCollName));
         cmdBob.append("tailable", true);
         cmdBob.append("oplogReplay", true);
         cmdBob.append("awaitData", true);
