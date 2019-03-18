@@ -261,6 +261,7 @@ void GlobalSync::_runProducer() {
         auto opCtx = cc().makeOperationContext();
         if (getState() == ProducerState::Starting) {
             start(opCtx.get());
+            log() << "MultiMaster _runProducer starting lastOpTimeFetched: " << _lastOpTimeFetched;
         }
         // POC hack
         computeCurrentSyncSourcePort();
@@ -823,8 +824,8 @@ void GlobalSync::start(OperationContext* opCtx) {
         // When a node steps down during drain mode, the last fetched optime would be newer than
         // the last applied.
         if (_lastOpTimeFetched <= lastAppliedOpTime) {
-            LOG(1) << "Setting globalSync _lastOpTimeFetched=" << lastAppliedOpTime
-                   << ". Previous _lastOpTimeFetched: " << _lastOpTimeFetched;
+            log() << "MUltiMaster Setting globalSync _lastOpTimeFetched=" << lastAppliedOpTime
+                  << ". Previous _lastOpTimeFetched: " << _lastOpTimeFetched;
             _lastOpTimeFetched = lastAppliedOpTime;
         }
         // Reload the last applied optime from disk if it has been changed.

@@ -10,7 +10,7 @@
 
     const source_rs = new ReplSetTest({
         name: "source_rs",
-        nodes: [ {setParameter: {isMongodWithGlobalSync: true}} ],
+        nodes: [{setParameter: {isMongodWithGlobalSync: true}}],
         nodeOptions: {}
     });
     source_rs.startSet();
@@ -23,40 +23,37 @@
     let sourceColl = sourceDB[collName];
 
     assert.commandWorked(sourceDB.createCollection(collName));
-    
+
     jsTestLog("primed source collection");
 
     const mongog = new ReplSetTest({
         name: "mongog_rs",
-        nodes: [
-            {setParameter: {
-               isMongoG: true,
-               testSourceRSPort: source_rs.getPrimary().port}}],
+        nodes: [{setParameter: {isMongoG: true, testSourceRSPort: source_rs.getPrimary().port}}],
         nodeOptions: {}
     });
     mongog.startSet();
     mongog.initiate();
-    //mongog.getPrimary().getDB("test").setLogLevel(2); 
+    // mongog.getPrimary().getDB("test").setLogLevel(2);
     jsTestLog(" started MongoG replicaset");
 
     let globalDB = mongog.getPrimary().getDB("local");
-    globalDB.createCollection("oplog_global", { capped: true, size: 100000 });
+    globalDB.createCollection("oplog_global", {capped: true, size: 100000});
 
-
-    assert.commandWorked(sourceAdminDB.runCommand({setParameter: 1, testSourceRSPort: mongog.getPrimary().port}));
+    assert.commandWorked(
+        sourceAdminDB.runCommand({setParameter: 1, testSourceRSPort: mongog.getPrimary().port}));
 
     const dest_rs = new ReplSetTest({
         name: "dest_rs",
-        nodes: [
-            {setParameter: {
-               isMongodWithGlobalSync: true,
-               testSourceRSPort: mongog.getPrimary().port}}],
+        nodes: [{
+            setParameter:
+                {isMongodWithGlobalSync: true, testSourceRSPort: mongog.getPrimary().port}
+        }],
         nodeOptions: {}
     });
 
     dest_rs.startSet();
     dest_rs.initiate();
-    // dest_rs.getPrimary().getDB("test").setLogLevel(2); 
+    // dest_rs.getPrimary().getDB("test").setLogLevel(2);
     jsTestLog(" started dest replicaset");
 
     let destDB = dest_rs.getPrimary().getDB(dbName);
@@ -65,7 +62,7 @@
 
     assert.commandWorked(destDB.createCollection(collName));
     jsTestLog("primed dest collection");
-    
+
     // Insert a document on primary and let it majority commit.
     sleep(1000);
 
@@ -73,7 +70,7 @@
     assert.eq(res.n, 0);
 
     const nDocs = 10;
-    for (let i=1; i<=nDocs; ++i) {
+    for (let i = 1; i <= nDocs; ++i) {
         assert.commandWorked(sourceColl.insert({_id: i}, {writeConcern: {w: "majority"}}));
     }
     sleep(1000);
@@ -86,13 +83,12 @@
     res = assert.commandWorked(destDB.runCommand({count: collName}));
     jsTestLog("just checking: res: " + tojson(res));
     // assert.eq(res.n, nDocs);
-    
-    //Now insert into the dest and check out the source
-    assert.commandWorked(mongog.getPrimary().getDB("admin").runCommand(
-        {setParameter: 1, testSourceRSPort: dest_rs.getPrimary().port}
-    ));
 
-    for (let i=11; i<=nDocs + 10; ++i) {
+    // Now insert into the dest and check out the source
+    assert.commandWorked(mongog.getPrimary().getDB("admin").runCommand(
+        {setParameter: 1, testSourceRSPort: dest_rs.getPrimary().port}));
+
+    for (let i = 11; i <= nDocs + 10; ++i) {
         assert.commandWorked(destColl.insert({_id: i}, {writeConcern: {w: "majority"}}));
     }
 

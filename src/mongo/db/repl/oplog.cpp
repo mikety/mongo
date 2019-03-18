@@ -96,6 +96,7 @@
 #include "mongo/util/file.h"
 #include "mongo/util/log.h"
 #include "mongo/util/mongoutils/str.h"
+#include "mongo/util/net/socket_utils.h"
 #include "mongo/util/startup_test.h"
 
 namespace mongo {
@@ -108,10 +109,19 @@ using std::vector;
 
 using IndexVersion = IndexDescriptor::IndexVersion;
 
+extern const bool isMongodWithGlobalSync;
+
+extern const std::atomic<int> mmPortConfig;
+
 namespace repl {
 namespace {
 
 MONGO_FAIL_POINT_DEFINE(sleepBetweenInsertOpTimeGenerationAndLogOp);
+
+std::string constructInstanceId() {
+    std::string hostName = getHostNameCached();
+    return str::stream() << hostName << ":" << serverGlobalParams.port;
+}
 
 /**
  * This structure contains per-service-context state related to the oplog.
@@ -657,6 +667,27 @@ std::vector<OpTime> logInsertOps(OperationContext* opCtx,
         if (insertStatementOplogSlot.opTime.isNull()) {
             _getNextOpTimes(opCtx, oplog, 1, &insertStatementOplogSlot);
         }
+
+        BSONObj* o2Obj = nullptr;
+        /* POC
+                BSONObj tmpObj;
+                StringData mmDbName = "mm_replication";
+                StringData mmCollName = "MultiMasterCollection";
+                std::string source = constructInstanceId();
+
+                if (isMongodWithGlobalSync && nss.coll() == mmCollName && nss.db() == mmDbName) {
+                // Create the 'o2' field object. Store there initial version, source, and
+           clustertime.
+                    BSONObjBuilder o2Builder;
+                    o2Builder.append("_v", 0);
+                    o2Builder.append("_s", source);
+                    o2Builder.append("_t",
+           LogicalClock::get(opCtx)->getClusterTime().asTimestamp());
+                    tmpObj = o2Builder.done();
+                    o2Obj = &tmpObj;
+                    log() << "MultiMaster prepared o2: " << tmpObj;
+                }
+        */
         // Only 'applyOps' oplog entries can be prepared.
         constexpr bool prepare = false;
         writers.emplace_back(_logOpWriter(opCtx,
@@ -664,7 +695,7 @@ std::vector<OpTime> logInsertOps(OperationContext* opCtx,
                                           nss,
                                           uuid,
                                           begin[i].doc,
-                                          NULL,
+                                          o2Obj,
                                           fromMigrate,
                                           insertStatementOplogSlot.opTime,
                                           insertStatementOplogSlot.hash,

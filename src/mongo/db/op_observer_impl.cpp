@@ -516,6 +516,7 @@ void OpObserverImpl::onInserts(OperationContext* opCtx,
             txnParticipant.addTransactionOperation(opCtx, operation);
         }
     } else {
+        log() << "MultiMaster: onInserts nss: " << nss.db() << "." << nss.coll();
         lastWriteDate = getWallClockTimeForOpLog(opCtx);
         opTimeList = repl::logInsertOps(opCtx, nss, uuid, first, last, fromMigrate, lastWriteDate);
         if (!opTimeList.empty())

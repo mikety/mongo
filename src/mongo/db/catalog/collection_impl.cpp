@@ -59,6 +59,7 @@
 #include "mongo/db/index/index_access_method.h"
 #include "mongo/db/index/index_descriptor.h"
 #include "mongo/db/keypattern.h"
+#include "mongo/db/logical_clock.h"
 #include "mongo/db/matcher/expression_parser.h"
 #include "mongo/db/op_observer.h"
 #include "mongo/db/operation_context.h"
@@ -79,7 +80,13 @@
 #include "mongo/util/fail_point_service.h"
 #include "mongo/util/log.h"
 
+#include "mongo/util/net/socket_utils.h"
+
 namespace mongo {
+
+extern const bool isMongodWithGlobalSync;
+
+extern const std::atomic<int> mmPortConfig;
 
 namespace {
 //  This fail point injects insertion failures for all collections unless a collection name is
@@ -98,6 +105,11 @@ MONGO_FAIL_POINT_DEFINE(failCollectionInserts);
 //      first_id: <string>
 //  }
 MONGO_FAIL_POINT_DEFINE(hangAfterCollectionInserts);
+
+std::string constructInstanceId() {
+    std::string hostName = getHostNameCached();
+    return str::stream() << hostName << ":" << serverGlobalParams.port;
+}
 
 /**
  * Checks the 'failCollectionInserts' fail point at the beginning of an insert operation to see if
@@ -400,14 +412,48 @@ Status CollectionImpl::insertDocuments(OperationContext* opCtx,
 
     const SnapshotId sid = opCtx->recoveryUnit()->getSnapshotId();
 
-    status = _insertDocuments(opCtx, begin, end, opDebug);
+    // POC insert versions
+    vector<InsertStatement> newDocs;
+    StringData mmDbName = "mm_replication";
+    StringData mmCollName = "MultiMasterCollection";
+    bool useNewDocs =
+        (isMongodWithGlobalSync && ns().coll() == mmCollName && ns().db() == mmDbName);
+    for (auto it = begin; it != end; it++) {
+        auto newDoc = it->doc;
+        std::string source = constructInstanceId();
+        if (useNewDocs && !newDoc.hasElement("_v")) {
+            log() << "MultiMaster prepared newDoc before: " << newDoc;
+            // Create the '' field object. Store there initial version, source, and clustertime.
+            BSONObjBuilder oBuilder;
+            oBuilder.appendElements(newDoc);
+            BSONArrayBuilder arrBuilder;
+            BSONObjBuilder tBuilder;
+            tBuilder.append("_v", 0);
+            tBuilder.append("_s", source);
+            tBuilder.append("_t", LogicalClock::get(opCtx)->getClusterTime().asTimestamp());
+            arrBuilder.append(tBuilder.obj());
+            oBuilder.append("_history", arrBuilder.arr());
+            newDoc = oBuilder.done().getOwned();
+            log() << "MultiMaster prepared newDoc after: " << newDoc;
+        }
+        InsertStatement insert(it->stmtId, newDoc, it->oplogSlot);
+        newDocs.push_back(insert);
+    }
+
+    status = useNewDocs ? _insertDocuments(opCtx, newDocs.begin(), newDocs.end(), opDebug)
+                        : _insertDocuments(opCtx, begin, end, opDebug);
     if (!status.isOK()) {
         return status;
     }
     invariant(sid == opCtx->recoveryUnit()->getSnapshotId());
 
-    getGlobalServiceContext()->getOpObserver()->onInserts(
-        opCtx, ns(), uuid(), begin, end, fromMigrate);
+    if (useNewDocs) {
+        getGlobalServiceContext()->getOpObserver()->onInserts(
+            opCtx, ns(), uuid(), newDocs.begin(), newDocs.end(), fromMigrate);
+    } else {
+        getGlobalServiceContext()->getOpObserver()->onInserts(
+            opCtx, ns(), uuid(), begin, end, fromMigrate);
+    }
 
     opCtx->recoveryUnit()->onCommit(
         [this](boost::optional<Timestamp>) { notifyCappedWaitersIfNeeded(); });
@@ -670,16 +716,79 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
                                 << " != "
                                 << newDoc.objsize());
 
+
+    StringData mmDbName = "mm_replication";
+    StringData mmCollName = "MultiMasterCollection";
+    BSONObj newVersionedDoc;
+    bool isUpdated{false};
+
+    if (isMongodWithGlobalSync && ns().coll() == mmCollName && ns().db() == mmDbName) {
+        log() << "MultiMaster updateDocument check. Old doc: " << oldDoc.value()
+              << " newDoc: " << newDoc;
+        std::string source = constructInstanceId();
+        auto newSource = newDoc.getField("_s").String();
+        auto oldSource = oldDoc.value().getField("_s").String();
+        invariant(newDoc.hasField("_s") &&
+                  oldDoc.value().hasField("_s"));  // all docs must be versioned
+
+        int oldVersion = oldDoc.value().getField("_v").Int();
+        int newVersion = newDoc.getField("_v").Int();
+
+        BSONObjBuilder oBuilder;
+        oBuilder.append(newDoc.getField("_id"));
+        oBuilder.append(newDoc.getField("val"));
+        if (oldSource == source) {
+            if (newSource == oldSource) {  // local update. increment version
+                invariant(newVersion == oldVersion);
+                oBuilder.append("_v", newVersion + 1);
+                oBuilder.append(newDoc.getField("_s"));
+                oBuilder.append("_t", LogicalClock::get(opCtx)->getClusterTime().asTimestamp());
+                isUpdated = true;
+                log() << "Multimaster: local update 1";
+            } else {  // applying change made somewhere else. check conflicts
+                if (newVersion <= oldVersion) {
+                    log() << "Multimaster: CONFLICT detected!";
+                }
+            }
+        }
+        // POC Question: how to distinguish applied doc changes and local updates??
+        else {  // updating the doc produced remotely
+            oBuilder.append("_v", newVersion + 1);
+            oBuilder.append("_s", source);
+            oBuilder.append("_t", LogicalClock::get(opCtx)->getClusterTime().asTimestamp());
+            isUpdated = true;
+            log() << "Multimaster: local update 2";
+        }
+        if (isUpdated) {
+            newVersionedDoc = oBuilder.done().getOwned();
+            log() << "Multimaster: updated doc: " << newVersionedDoc;
+        }
+    }
+
     args->preImageDoc = oldDoc.value().getOwned();
 
     Status updateStatus =
-        _recordStore->updateRecord(opCtx, oldLocation, newDoc.objdata(), newDoc.objsize());
+        (isUpdated
+             ? _recordStore->updateRecord(
+                   opCtx, oldLocation, newVersionedDoc.objdata(), newVersionedDoc.objsize())
+             : _recordStore->updateRecord(opCtx, oldLocation, newDoc.objdata(), newDoc.objsize()));
 
     if (indexesAffected) {
         int64_t keysInserted, keysDeleted;
 
-        uassertStatusOK(_indexCatalog->updateRecord(
-            opCtx, args->preImageDoc.get(), newDoc, oldLocation, &keysInserted, &keysDeleted));
+        uassertStatusOK((isUpdated
+                             ? _indexCatalog->updateRecord(opCtx,
+                                                           args->preImageDoc.get(),
+                                                           newVersionedDoc,
+                                                           oldLocation,
+                                                           &keysInserted,
+                                                           &keysDeleted)
+                             : _indexCatalog->updateRecord(opCtx,
+                                                           args->preImageDoc.get(),
+                                                           newDoc,
+                                                           oldLocation,
+                                                           &keysInserted,
+                                                           &keysDeleted)));
 
         if (opDebug) {
             opDebug->additiveMetrics.incrementKeysInserted(keysInserted);
@@ -688,7 +797,7 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
     }
 
     invariant(sid == opCtx->recoveryUnit()->getSnapshotId());
-    args->updatedDoc = newDoc;
+    args->updatedDoc = (isUpdated ? newVersionedDoc : newDoc);
 
     invariant(uuid());
     OplogUpdateEntryArgs entryArgs(*args, ns(), *uuid());

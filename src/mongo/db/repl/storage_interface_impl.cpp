@@ -78,7 +78,12 @@
 #include "mongo/util/log.h"
 #include "mongo/util/mongoutils/str.h"
 
+#include "mongo/util/net/socket_utils.h"
 namespace mongo {
+
+extern const bool isMongodWithGlobalSync;
+
+extern const std::atomic<int> mmPortConfig;
 namespace repl {
 
 const char StorageInterfaceImpl::kDefaultRollbackIdNamespace[] = "local.system.rollback.id";
@@ -89,6 +94,11 @@ namespace {
 using UniqueLock = stdx::unique_lock<stdx::mutex>;
 
 const auto kIdIndexName = "_id_"_sd;
+
+std::string constructInstanceId() {
+    std::string hostName = getHostNameCached();
+    return str::stream() << hostName << ":" << serverGlobalParams.port;
+}
 
 LockMode fixLockModeForSystemDotViewsChanges(const NamespaceString& nss, LockMode mode) {
     return nss.isSystemDotViews() ? MODE_X : mode;
@@ -286,6 +296,27 @@ Status StorageInterfaceImpl::insertDocument(OperationContext* opCtx,
                                             const NamespaceStringOrUUID& nsOrUUID,
                                             const TimestampedBSONObj& doc,
                                             long long term) {
+    // POC insert versions
+    /*
+    StringData mmDbName = "mm_replication";
+    StringData mmCollName = "MultiMasterCollection";
+    bool useNewDocs =  (isMongodWithGlobalSync && nsOrUUID.nss()->coll() == mmCollName &&
+    nsOrUUID.nss()->db() == mmDbName);
+    auto newObj = doc.obj;
+    std::string source = constructInstanceId();
+    if (useNewDocs && !newObj.hasElement("_v")) {
+        log() << "MultiMaster prepared newDoc before: " << newObj;
+    // Create the '' field object. Store there initial version, source, and clustertime.
+        BSONObjBuilder oBuilder;
+        oBuilder.appendElements(newObj);
+        oBuilder.append("_v", 0);
+        oBuilder.append("_s", source);
+        oBuilder.append("_t", LogicalClock::get(opCtx)->getClusterTime().asTimestamp());
+        newObj = oBuilder.done();
+        log() << "MultiMaster prepared newDoc after: " << newObj;
+    }
+    */
+
     return insertDocuments(opCtx, nsOrUUID, {InsertStatement(doc.obj, doc.timestamp, term)});
 }
 
