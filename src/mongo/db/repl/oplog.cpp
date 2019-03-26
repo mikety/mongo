@@ -1429,6 +1429,7 @@ Status applyOperation_inlock(OperationContext* opCtx,
     if (fieldO.isABSONObj())
         o = fieldO.embeddedObject();
 
+    log() << "MultiMaster  applyOperation o :" << o;
     // operation type -- see logOp() comments for types
     const char* opType = fieldOp.valuestrsafe();
 

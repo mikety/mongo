@@ -168,6 +168,7 @@ Status _applyOps(OperationContext* opCtx,
             try {
                 ReplOperation::parse(IDLParserErrorContext("applyOps"), opObj);
             } catch (...) {
+                log() << "MultiMaster Cant parse: " << exceptionToStatus().toString();
                 uasserted(ErrorCodes::AtomicityFailure,
                           str::stream()
                               << "cannot apply a malformed operation in atomic applyOps mode: "

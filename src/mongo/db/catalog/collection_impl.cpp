@@ -421,20 +421,45 @@ Status CollectionImpl::insertDocuments(OperationContext* opCtx,
     for (auto it = begin; it != end; it++) {
         auto newDoc = it->doc;
         std::string source = constructInstanceId();
-        if (useNewDocs && !newDoc.hasElement("_v")) {
-            log() << "MultiMaster prepared newDoc before: " << newDoc;
-            // Create the '' field object. Store there initial version, source, and clustertime.
+        std::string origSource;
+        auto localTs = LogicalClock::get(opCtx)->getClusterTime().asTimestamp();
+        Timestamp remoteTs;
+        if (useNewDocs) {
             BSONObjBuilder oBuilder;
-            oBuilder.appendElements(newDoc);
+            log() << "MultiMaster insertDocuments prepared newDoc before: " << newDoc;
+            if (newDoc.hasElement("_history")) {
+                oBuilder.append(newDoc.getField("_id"));
+                oBuilder.append(newDoc.getField("val"));
+            }
+            else {
+                oBuilder.appendElements(newDoc);
+                origSource = source;
+            }
+            // Create the '' field object. Store there initial version, source, and clustertime.
             BSONArrayBuilder arrBuilder;
+            if (newDoc.hasElement("_history")) {
+                auto newHistIt = BSONArrayIteratorSorted(BSONArray(newDoc.getField("_history").Obj()));
+                while (newHistIt.more()) {
+                    auto currElem = newHistIt.next().Obj();
+                    if (currElem.hasField("_o")) {
+                        origSource = currElem.getField("_o").String();
+                    }
+                    if (origSource != source && currElem.hasField("_t")) {
+                        auto curTs = currElem.getField("_t").timestamp();
+                        remoteTs = std::max(curTs, remoteTs);
+                    }
+                    arrBuilder.append(currElem);
+                }
+            }
             BSONObjBuilder tBuilder;
             tBuilder.append("_v", 0);
             tBuilder.append("_s", source);
-            tBuilder.append("_t", LogicalClock::get(opCtx)->getClusterTime().asTimestamp());
-            arrBuilder.append(tBuilder.obj());
-            oBuilder.append("_history", arrBuilder.arr());
+            tBuilder.append("_o", origSource);
+            tBuilder.append("_t", remoteTs.isNull() ? localTs : remoteTs);
+            arrBuilder.append(tBuilder.done().getOwned());
+            oBuilder.append("_history", BSONArray(arrBuilder.done().getOwned()));
             newDoc = oBuilder.done().getOwned();
-            log() << "MultiMaster prepared newDoc after: " << newDoc;
+            log() << "MultiMaster insertDocuments prepared newDoc after: " << newDoc;
         }
         InsertStatement insert(it->stmtId, newDoc, it->oplogSlot);
         newDocs.push_back(insert);
@@ -726,8 +751,79 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
         log() << "MultiMaster updateDocument check. Old doc: " << oldDoc.value()
               << " newDoc: " << newDoc;
         std::string source = constructInstanceId();
-        auto newSource = newDoc.getField("_s").String();
-        auto oldSource = oldDoc.value().getField("_s").String();
+        std::string origSource = source;
+        std::string remoteSource;
+        std::string sSource;
+        auto newHistory = BSONArray(newDoc.getField("_history").Obj());
+        auto oldHistory = BSONArray(oldDoc.value().getField("_history").Obj());
+
+        BSONArrayIteratorSorted newHistIt(newHistory); 
+        BSONArrayIteratorSorted oldHistIt(oldHistory); 
+        BSONArrayBuilder histBuilder;
+        int version(0);
+        int curVersion(0);
+        int remoteVersion(0);
+        auto localTs = LogicalClock::get(opCtx)->getClusterTime().asTimestamp();
+        Timestamp remoteTs;
+        // bypass common prefix in the new and the old history and find the latest change timestamp
+        while (oldHistIt.more()) {
+            auto oldHistElem = oldHistIt.next().Obj().getOwned();
+            if (oldHistElem.hasField("_o")) {
+                origSource = oldHistElem.getField("_o").String();
+            }
+            if (oldHistElem.hasField("_v")) {
+                curVersion = oldHistElem.getField("_v").Int();
+                version = std::max(version, curVersion); 
+                log() << "MultiMatster: updated version to " << version << " from old doc " << oldHistElem;
+            }
+            if (oldHistElem.hasField("_s")) {
+                sSource = oldHistElem.getField("_s").String();
+            }
+            if (origSource == sSource && oldHistElem.hasField("_t")) {
+                auto curTs = oldHistElem.getField("_t").timestamp();
+                remoteTs = std::max(curTs, remoteTs);
+                remoteVersion = curVersion;
+                remoteSource = sSource;
+            }
+            
+            if (newHistIt.more()) {
+                auto newHistElem = newHistIt.next().Obj().getOwned();
+                if (newHistElem.hasField("_v")) {
+                    log() << "MultiMatster: updated version to " << version << " from new doc " << newHistElem;
+                    version = std::max(version, newHistElem.getField("_v").Int());
+                }
+                if (oldHistElem.woCompare(newHistElem) != 0) {
+                    histBuilder.append(newHistElem);
+                }
+                else {
+                    histBuilder.append(oldHistElem);
+                }
+            }
+        }
+        while (newHistIt.more()) {
+            auto newHistElem = newHistIt.next().Obj().getOwned();
+            if (newHistElem.hasField("_v")) {
+                version = std::max(version, newHistElem.getField("_v").Int());
+            }
+            histBuilder.append(newHistElem);
+        }
+        // compute new version
+        BSONObjBuilder tBuilder;
+        version++;
+        tBuilder.append("_v", version);
+        tBuilder.append("_s", source);
+        tBuilder.append("_o", remoteSource);
+        tBuilder.append("_t", remoteTs);
+        histBuilder.append(tBuilder.done());
+
+        BSONObjBuilder oBuilder;
+        oBuilder.append(newDoc.getField("_id"));
+        oBuilder.append(newDoc.getField("val"));
+        oBuilder.append("_history", histBuilder.arr());
+        newVersionedDoc = oBuilder.done().getOwned();
+        isUpdated = true;
+        log() << "Multimaster: updated doc: " << newVersionedDoc;
+        /*
         invariant(newDoc.hasField("_s") &&
                   oldDoc.value().hasField("_s"));  // all docs must be versioned
 
@@ -763,6 +859,7 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
             newVersionedDoc = oBuilder.done().getOwned();
             log() << "Multimaster: updated doc: " << newVersionedDoc;
         }
+        */
     }
 
     args->preImageDoc = oldDoc.value().getOwned();
