@@ -430,15 +430,15 @@ Status CollectionImpl::insertDocuments(OperationContext* opCtx,
             if (newDoc.hasElement("_history")) {
                 oBuilder.append(newDoc.getField("_id"));
                 oBuilder.append(newDoc.getField("val"));
-            }
-            else {
+            } else {
                 oBuilder.appendElements(newDoc);
                 origSource = source;
             }
             // Create the '' field object. Store there initial version, source, and clustertime.
             BSONArrayBuilder arrBuilder;
             if (newDoc.hasElement("_history")) {
-                auto newHistIt = BSONArrayIteratorSorted(BSONArray(newDoc.getField("_history").Obj()));
+                auto newHistIt =
+                    BSONArrayIteratorSorted(BSONArray(newDoc.getField("_history").Obj()));
                 while (newHistIt.more()) {
                     auto currElem = newHistIt.next().Obj();
                     if (currElem.hasField("_o")) {
@@ -757,8 +757,8 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
         auto newHistory = BSONArray(newDoc.getField("_history").Obj());
         auto oldHistory = BSONArray(oldDoc.value().getField("_history").Obj());
 
-        BSONArrayIteratorSorted newHistIt(newHistory); 
-        BSONArrayIteratorSorted oldHistIt(oldHistory); 
+        BSONArrayIteratorSorted newHistIt(newHistory);
+        BSONArrayIteratorSorted oldHistIt(oldHistory);
         BSONArrayBuilder histBuilder;
         int version(0);
         int curVersion(0);
@@ -773,8 +773,9 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
             }
             if (oldHistElem.hasField("_v")) {
                 curVersion = oldHistElem.getField("_v").Int();
-                version = std::max(version, curVersion); 
-                log() << "MultiMatster: updated version to " << version << " from old doc " << oldHistElem;
+                version = std::max(version, curVersion);
+                log() << "MultiMatster: updated version to " << version << " from old doc "
+                      << oldHistElem;
             }
             if (oldHistElem.hasField("_s")) {
                 sSource = oldHistElem.getField("_s").String();
@@ -785,17 +786,17 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
                 remoteVersion = curVersion;
                 remoteSource = sSource;
             }
-            
+
             if (newHistIt.more()) {
                 auto newHistElem = newHistIt.next().Obj().getOwned();
                 if (newHistElem.hasField("_v")) {
-                    log() << "MultiMatster: updated version to " << version << " from new doc " << newHistElem;
+                    log() << "MultiMatster: updated version to " << version << " from new doc "
+                          << newHistElem;
                     version = std::max(version, newHistElem.getField("_v").Int());
                 }
                 if (oldHistElem.woCompare(newHistElem) != 0) {
                     histBuilder.append(newHistElem);
-                }
-                else {
+                } else {
                     histBuilder.append(oldHistElem);
                 }
             }

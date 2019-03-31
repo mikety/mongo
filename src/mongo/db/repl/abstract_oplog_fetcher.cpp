@@ -86,7 +86,7 @@ AbstractOplogFetcher::AbstractOplogFetcher(executor::TaskExecutor* executor,
       _onShutdownCallbackFn(onShutdownCallbackFn),
       _lastFetched(lastFetched) {
 
-    invariant(!_lastFetched.isNull());
+    // invariant(!_lastFetched.isNull());
     invariant(onShutdownCallbackFn);
 }
 

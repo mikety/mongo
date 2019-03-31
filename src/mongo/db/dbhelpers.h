@@ -64,6 +64,11 @@ struct Helpers {
                         BSONObj& result,
                         bool requireIndex = false);
 
+    static bool findOne(OperationContext* opCtx,
+                        const char* ns,
+                        const BSONObj& query,
+                        BSONObj& result);
+
     static RecordId findOne(OperationContext* opCtx,
                             Collection* collection,
                             const BSONObj& query,
@@ -106,6 +111,7 @@ struct Helpers {
      * Same as getSingleton, but with a reverse natural-order scan on "ns".
      */
     static bool getLast(OperationContext* opCtx, const char* ns, BSONObj& result);
+    static bool getFirst(OperationContext* opCtx, const char* ns, BSONObj& result);
 
     /**
      * Performs an upsert of "obj" into the collection "ns", with an empty update predicate.

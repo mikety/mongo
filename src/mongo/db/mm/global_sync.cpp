@@ -164,7 +164,8 @@ bool DataReplicatorExternalStateGlobalSync::shouldStopFetching(
         return true;
     }
 
-    return DataReplicatorExternalStateImpl::shouldStopFetching(source, replMetadata, oqMetadata);
+    return isMongoG ? true : false;  // because config server needs to sync from multiple sources
+    // return DataReplicatorExternalStateImpl::shouldStopFetching(source, replMetadata, oqMetadata);
 }
 
 size_t getSize(const BSONObj& o) {
@@ -487,7 +488,13 @@ void GlobalSync::_produce() {
                 return this->_enqueueDocuments(a1, a2, a3);
             },
             onOplogFetcherShutdownCallbackFn,
-            defaultBatchSize);
+            defaultBatchSize,
+            GlobalFetcher::StartingPoint::kEnqueueFirstDoc);
+        /*
+        isMongoG ? GlobalFetcher::StartingPoint::kEnqueueFirstDoc :
+                   GlobalFetcher::StartingPoint::kSkipFirstDoc); // TODO: POC - make it more
+        intelligent.
+                   */
         stdx::lock_guard<stdx::mutex> lock(_mutex);
         if (_state != ProducerState::Running) {
             log() << "MultiMaster producer state is not running";
@@ -834,17 +841,22 @@ void GlobalSync::start(OperationContext* opCtx) {
     LOG(1) << "globalSync fetch queue set to: " << _lastOpTimeFetched;
 }
 
+// TODO read only entry from synced collections
 OpTime GlobalSync::_readLastAppliedOpTime(OperationContext* opCtx) {
     BSONObj oplogEntry;
+    StringData mmCollName = "mm_replication.MultiMasterCollection";
     try {
         bool success = writeConflictRetry(
             opCtx, "readLastAppliedOpTime", NamespaceString::kRsOplogNamespace.ns(), [&] {
                 Lock::DBLock lk(opCtx, "local", MODE_X);
-                return Helpers::getLast(
+                // return Helpers::findOne(opCtx, NamespaceString::kRsOplogNamespace.ns().c_str(),
+                //    BSON( "ns" << mmCollName) ,oplogEntry);
+                return Helpers::getFirst(
                     opCtx, NamespaceString::kRsOplogNamespace.ns().c_str(), oplogEntry);
             });
 
         if (!success) {
+            log() << "Error reading last entry of oplog in globalSync";
             // This can happen when we are to do an initial sync.
             return OpTime();
         }
@@ -857,8 +869,8 @@ OpTime GlobalSync::_readLastAppliedOpTime(OperationContext* opCtx) {
     }
 
     OplogEntry parsedEntry(oplogEntry);
-    LOG(1) << "Successfully read last entry of oplog while starting globalSync: "
-           << redact(oplogEntry);
+    log() << "Successfully read last entry of oplog while starting globalSync: "
+          << redact(oplogEntry);
     return parsedEntry.getOpTime();
 }
 

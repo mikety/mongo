@@ -315,6 +315,7 @@ Status Fetcher::_scheduleGetMore(const BSONObj& cmdObj) {
         return Status(ErrorCodes::CallbackCanceled,
                       "fetcher was shut down after previous batch was processed");
     }
+    log() << "Sending getmore command: " << cmdObj;
     StatusWith<executor::TaskExecutor::CallbackHandle> scheduleResult =
         _executor->scheduleRemoteCommand(
             RemoteCommandRequest(
@@ -331,6 +332,7 @@ Status Fetcher::_scheduleGetMore(const BSONObj& cmdObj) {
 }
 
 void Fetcher::_callback(const RemoteCommandCallbackArgs& rcbd, const char* batchFieldName) {
+    log() << "Fetcher callback";
     QueryResponse batchData;
     auto finishCallbackGuard = makeGuard([this, &batchData] {
         if (batchData.cursorId && !batchData.nss.isEmpty()) {

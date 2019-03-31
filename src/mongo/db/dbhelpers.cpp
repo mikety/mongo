@@ -78,6 +78,30 @@ bool Helpers::findOne(OperationContext* opCtx,
     return true;
 }
 
+bool Helpers::findOne(OperationContext* opCtx,
+                      const char* ns,
+                      const BSONObj& query,
+                      BSONObj& result) {
+    AutoGetCollectionForReadCommand autoColl(opCtx, NamespaceString(ns));
+    return findOne(opCtx, autoColl.getCollection(), query, result, false);
+}
+
+bool Helpers::getFirst(OperationContext* opCtx, const char* ns, BSONObj& result) {
+    AutoGetCollectionForReadCommand autoColl(opCtx, NamespaceString(ns));
+    auto exec = InternalPlanner::collectionScan(
+        opCtx, ns, autoColl.getCollection(), PlanExecutor::NO_YIELD, InternalPlanner::FORWARD);
+    PlanExecutor::ExecState state = exec->getNext(&result, NULL);
+
+    // Non-yielding collection scans from InternalPlanner will never error.
+    invariant(PlanExecutor::ADVANCED == state || PlanExecutor::IS_EOF == state);
+
+    if (PlanExecutor::ADVANCED == state) {
+        result = result.getOwned();
+        return true;
+    }
+
+    return false;
+}
 /* fetch a single object from collection ns that matches query
    set your db SavedContext first
 */

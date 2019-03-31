@@ -82,11 +82,15 @@ BSONObj makeGetMoreCommandObject(const NamespaceString& nss,
     cmdBob.append("collection", nss.coll());
     cmdBob.append("batchSize", batchSize);
     cmdBob.append("maxTimeMS", durationCount<Milliseconds>(fetcherMaxTimeMS));
+    /*
     if (lastCommittedWithCurrentTerm.value != OpTime::kUninitializedTerm) {
         cmdBob.append("term", lastCommittedWithCurrentTerm.value);
         lastCommittedWithCurrentTerm.opTime.append(&cmdBob, "lastKnownCommittedOpTime");
     }
-    return cmdBob.obj();
+    */
+    auto cmdGetMore = cmdBob.obj();
+    log() << "MultiMaster _makeGetMoreCommandObject: " << cmdGetMore;
+    return cmdGetMore;
 }
 
 /**
@@ -355,7 +359,7 @@ BSONObj GlobalFetcher::_makeFindCommandObject(const NamespaceString& nss,
                                               Milliseconds findMaxTime) const {
     auto lastCommittedWithCurrentTerm =
         _dataReplicatorExternalState->getCurrentTermAndLastCommittedOpTime();
-    auto term = lastCommittedWithCurrentTerm.value;
+    // auto term = lastCommittedWithCurrentTerm.value;
     BSONObjBuilder cmdBob;
     StringData mmCollName = "mm_replication.MultiMasterCollection";
     if (isMongodWithGlobalSync) {
@@ -368,14 +372,16 @@ BSONObj GlobalFetcher::_makeFindCommandObject(const NamespaceString& nss,
                                 << BSON("$ne" << instanceId)));
         cmdBob.append("projection", BSON("_id" << 0 << "ui" << 0));
         cmdBob.append("tailable", true);
-        // cmdBob.append("oplogReplay", true);
+        // cmdBob.append("oplogReplay", true); for some reason it blocks the commit!
         cmdBob.append("awaitData", true);
         cmdBob.append("maxTimeMS", durationCount<Milliseconds>(findMaxTime));
         cmdBob.append("batchSize", _batchSize);
 
+        /*
         if (term != OpTime::kUninitializedTerm) {
             cmdBob.append("term", term);
         }
+        */
 
         // This ensures that the sync source never returns an empty batch of documents for the first
         // set
@@ -394,15 +400,17 @@ BSONObj GlobalFetcher::_makeFindCommandObject(const NamespaceString& nss,
         cmdBob.append("awaitData", true);
         cmdBob.append("maxTimeMS", durationCount<Milliseconds>(findMaxTime));
         cmdBob.append("batchSize", _batchSize);
-
-        if (term != OpTime::kUninitializedTerm) {
-            cmdBob.append("term", term);
-        }
+        /*
+                if (term != OpTime::kUninitializedTerm) {
+                    cmdBob.append("term", term);
+                }
+        */
 
         // This ensures that the sync source never returns an empty batch of documents for the first
         // set
         // of results.
-        cmdBob.append("readConcern", BSON("afterClusterTime" << lastOpTimeFetched.getTimestamp()));
+        // cmdBob.append("readConcern", BSON("afterClusterTime" <<
+        // lastOpTimeFetched.getTimestamp()));
     }
 
     auto cmdToFind = cmdBob.obj();
@@ -433,11 +441,11 @@ StatusWith<BSONObj> GlobalFetcher::_onSuccessfulBatch(const Fetcher::QueryRespon
 
     log() << "MultiMaster _onSuccessfulBatch 1";
     if (!documents.empty()) {
-        LOG(2) << "oplog fetcher read " << documents.size()
-               << " operations from remote oplog starting at " << documents.front()["ts"]
-               << " and ending at " << documents.back()["ts"];
+        log() << "oplog fetcher read " << documents.size()
+              << " operations from remote oplog starting at " << documents.front()["ts"]
+              << " and ending at " << documents.back()["ts"];
     } else {
-        LOG(2) << "oplog fetcher read 0 operations from remote oplog";
+        log() << "oplog fetcher read 0 operations from remote oplog";
     }
 
     auto oqMetadataResult = parseOplogQueryMetadata(queryResponse);
