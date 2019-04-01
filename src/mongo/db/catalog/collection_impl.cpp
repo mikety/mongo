@@ -747,12 +747,12 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
     BSONObj newVersionedDoc;
     bool isUpdated{false};
 
+    auto argsCopy = *args;
     if (isMongodWithGlobalSync && ns().coll() == mmCollName && ns().db() == mmDbName) {
         log() << "MultiMaster updateDocument check. Old doc: " << oldDoc.value()
               << " newDoc: " << newDoc;
         std::string source = constructInstanceId();
-        std::string origSource = source;
-        std::string remoteSource;
+        std::string oSource = source;
         std::string sSource;
         auto newHistory = BSONArray(newDoc.getField("_history").Obj());
         auto oldHistory = BSONArray(oldDoc.value().getField("_history").Obj());
@@ -762,39 +762,33 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
         BSONArrayBuilder histBuilder;
         int version(0);
         int curVersion(0);
-        int remoteVersion(0);
         auto localTs = LogicalClock::get(opCtx)->getClusterTime().asTimestamp();
-        Timestamp remoteTs;
+        Timestamp ts;
         // bypass common prefix in the new and the old history and find the latest change timestamp
         while (oldHistIt.more()) {
             auto oldHistElem = oldHistIt.next().Obj().getOwned();
             if (oldHistElem.hasField("_o")) {
-                origSource = oldHistElem.getField("_o").String();
+                oSource = oldHistElem.getField("_o").String();
             }
             if (oldHistElem.hasField("_v")) {
                 curVersion = oldHistElem.getField("_v").Int();
                 version = std::max(version, curVersion);
-                log() << "MultiMatster: updated version to " << version << " from old doc "
-                      << oldHistElem;
             }
             if (oldHistElem.hasField("_s")) {
                 sSource = oldHistElem.getField("_s").String();
             }
-            if (origSource == sSource && oldHistElem.hasField("_t")) {
+            if (oSource == sSource && oldHistElem.hasField("_t")) {
                 auto curTs = oldHistElem.getField("_t").timestamp();
-                remoteTs = std::max(curTs, remoteTs);
-                remoteVersion = curVersion;
-                remoteSource = sSource;
+                ts = std::max(curTs, ts);
             }
 
             if (newHistIt.more()) {
                 auto newHistElem = newHistIt.next().Obj().getOwned();
                 if (newHistElem.hasField("_v")) {
-                    log() << "MultiMatster: updated version to " << version << " from new doc "
-                          << newHistElem;
                     version = std::max(version, newHistElem.getField("_v").Int());
                 }
                 if (oldHistElem.woCompare(newHistElem) != 0) {
+                    log() << "MM WTF?? oldHist is not matching new hist!";
                     histBuilder.append(newHistElem);
                 } else {
                     histBuilder.append(oldHistElem);
@@ -806,61 +800,58 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
             if (newHistElem.hasField("_v")) {
                 version = std::max(version, newHistElem.getField("_v").Int());
             }
+            if (newHistElem.hasField("_o")) {
+                oSource = newHistElem.getField("_o").String();
+            }
+            if (newHistElem.hasField("_s")) {
+                sSource = newHistElem.getField("_s").String();
+            }
+            if (oSource == sSource && newHistElem.hasField("_t")) {
+                auto curTs = newHistElem.getField("_t").timestamp();
+                ts = std::max(curTs, ts);
+            }
             histBuilder.append(newHistElem);
         }
-        // compute new version
         BSONObjBuilder tBuilder;
-        version++;
+        // if the prev history source is the same as this host its a local update, so compute new version
+        // and update original source to current.
+        // otherwise its an application of the oplog, so do not change the version and original
+        // source
+        if (sSource == source) {
+            version++;
+            oSource = source;
+            ts = localTs;
+        }
         tBuilder.append("_v", version);
         tBuilder.append("_s", source);
-        tBuilder.append("_o", remoteSource);
-        tBuilder.append("_t", remoteTs);
-        histBuilder.append(tBuilder.done());
+        tBuilder.append("_o", oSource);
+        tBuilder.append("_t", ts);
+        auto lastHistObj = tBuilder.done();
+        log() << "MultiMatster: updated version to " << version << " in the " << lastHistObj;
+        histBuilder.append(lastHistObj);
 
         BSONObjBuilder oBuilder;
+        auto newHistoryArr = histBuilder.arr();
         oBuilder.append(newDoc.getField("_id"));
         oBuilder.append(newDoc.getField("val"));
-        oBuilder.append("_history", histBuilder.arr());
+        oBuilder.append("_history", newHistoryArr);
         newVersionedDoc = oBuilder.done().getOwned();
         isUpdated = true;
         log() << "Multimaster: updated doc: " << newVersionedDoc;
-        /*
-        invariant(newDoc.hasField("_s") &&
-                  oldDoc.value().hasField("_s"));  // all docs must be versioned
-
-        int oldVersion = oldDoc.value().getField("_v").Int();
-        int newVersion = newDoc.getField("_v").Int();
-
-        BSONObjBuilder oBuilder;
-        oBuilder.append(newDoc.getField("_id"));
-        oBuilder.append(newDoc.getField("val"));
-        if (oldSource == source) {
-            if (newSource == oldSource) {  // local update. increment version
-                invariant(newVersion == oldVersion);
-                oBuilder.append("_v", newVersion + 1);
-                oBuilder.append(newDoc.getField("_s"));
-                oBuilder.append("_t", LogicalClock::get(opCtx)->getClusterTime().asTimestamp());
-                isUpdated = true;
-                log() << "Multimaster: local update 1";
-            } else {  // applying change made somewhere else. check conflicts
-                if (newVersion <= oldVersion) {
-                    log() << "Multimaster: CONFLICT detected!";
-                }
-            }
+        if (isUpdated) { // POC hack to keep the history with updates so it gets to the global oplog
+            auto update = args->update.getOwned();
+            BSONObjBuilder setBuilder;
+            setBuilder.appendElements(update.getField("$set").Obj());
+            setBuilder.append("_history", newHistoryArr); 
+            auto newSet = setBuilder.done().getOwned();
+            // argsCopy.update = newSet;
+            log() << "args old update: " << argsCopy.update;
+            BSONObjBuilder updateBuilder;
+            updateBuilder.append(update.getField("$v"));
+            updateBuilder.append("$set", newSet);
+            argsCopy.update = updateBuilder.done().getOwned();
+            log() << "args new update: " << argsCopy.update;
         }
-        // POC Question: how to distinguish applied doc changes and local updates??
-        else {  // updating the doc produced remotely
-            oBuilder.append("_v", newVersion + 1);
-            oBuilder.append("_s", source);
-            oBuilder.append("_t", LogicalClock::get(opCtx)->getClusterTime().asTimestamp());
-            isUpdated = true;
-            log() << "Multimaster: local update 2";
-        }
-        if (isUpdated) {
-            newVersionedDoc = oBuilder.done().getOwned();
-            log() << "Multimaster: updated doc: " << newVersionedDoc;
-        }
-        */
     }
 
     args->preImageDoc = oldDoc.value().getOwned();
@@ -895,10 +886,10 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
     }
 
     invariant(sid == opCtx->recoveryUnit()->getSnapshotId());
-    args->updatedDoc = (isUpdated ? newVersionedDoc : newDoc);
+    argsCopy.updatedDoc = (isUpdated ? newVersionedDoc : newDoc);
 
     invariant(uuid());
-    OplogUpdateEntryArgs entryArgs(*args, ns(), *uuid());
+    OplogUpdateEntryArgs entryArgs(argsCopy, ns(), *uuid());
     getGlobalServiceContext()->getOpObserver()->onUpdate(opCtx, entryArgs);
 
     return {oldLocation};
