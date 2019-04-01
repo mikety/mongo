@@ -813,7 +813,8 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
             histBuilder.append(newHistElem);
         }
         BSONObjBuilder tBuilder;
-        // if the prev history source is the same as this host its a local update, so compute new version
+        // if the prev history source is the same as this host its a local update, so compute new
+        // version
         // and update original source to current.
         // otherwise its an application of the oplog, so do not change the version and original
         // source
@@ -838,11 +839,12 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
         newVersionedDoc = oBuilder.done().getOwned();
         isUpdated = true;
         log() << "Multimaster: updated doc: " << newVersionedDoc;
-        if (isUpdated) { // POC hack to keep the history with updates so it gets to the global oplog
+        if (isUpdated) {  // POC hack to keep the history with updates so it gets to the global
+                          // oplog
             auto update = args->update.getOwned();
             BSONObjBuilder setBuilder;
             setBuilder.appendElements(update.getField("$set").Obj());
-            setBuilder.append("_history", newHistoryArr); 
+            setBuilder.append("_history", newHistoryArr);
             auto newSet = setBuilder.done().getOwned();
             // argsCopy.update = newSet;
             log() << "args old update: " << argsCopy.update;
@@ -896,6 +898,7 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
 }
 
 bool CollectionImpl::updateWithDamagesSupported() const {
+    return false;
     if (_validator)
         return false;
 
@@ -913,6 +916,7 @@ StatusWith<RecordData> CollectionImpl::updateDocumentWithDamages(
     invariant(oldRec.snapshotId() == opCtx->recoveryUnit()->getSnapshotId());
     invariant(updateWithDamagesSupported());
 
+    log() << "updateDocumentWithDamages";
     auto newRecStatus =
         _recordStore->updateWithDamages(opCtx, loc, oldRec.value(), damageSource, damages);
 
