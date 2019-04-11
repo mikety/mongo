@@ -152,6 +152,26 @@ public:
 
 MONGO_REGISTER_TEST_COMMAND(CmdReplSetTest);
 
+class CmdReplSetStartGlobalSync : public ReplSetCommand {
+public:
+    std::string help() const override {
+        return "Starts global sync"
+               "{ replSetStartGlobalSync : 1 }\n"
+               "http://dochub.mongodb.org/core/replicasetcommands";
+    }
+    CmdReplSetStartGlobalSync() : ReplSetCommand("replSetStartGlobalSync") {}
+    virtual bool run(OperationContext* opCtx,
+                     const string&,
+                     const BSONObj& cmdObj,
+                     BSONObjBuilder& result) {
+        Status status = ReplicationCoordinator::get(opCtx)->checkReplEnabledForCommand(&result);
+        uassertStatusOK(status);
+
+        ReplicationCoordinator::get(opCtx)->processReplSetStartGlobalSync(opCtx, &result);
+        return true;
+    }
+} cmdReplSetStartGlobalSync;
+
 /** get rollback id.  used to check if a rollback happened during some interval of time.
     as consumed, the rollback id is not in any particular order, it simply changes on each rollback.
     @see incRBID()

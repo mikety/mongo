@@ -90,6 +90,12 @@ public:
                                              ReplicationCoordinator* replCoord) = 0;
 
     /**
+     * Starts steady global state sync for replica set member.
+     */
+    virtual void startSteadyStateGlobalSync(OperationContext* opCtx,
+                                            ReplicationCoordinator* replCoord) = 0;
+
+    /**
      * Stops the data replication threads = bgsync, applier, reporter.
      */
     virtual void stopDataReplication(OperationContext* opCtx) = 0;

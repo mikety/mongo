@@ -176,17 +176,20 @@ size_t getSize(const BSONObj& o) {
 
 GlobalSync::GlobalSync(ReplicationCoordinator* replicationCoordinator,
                        ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
-                       ReplicationProcess* replicationProcess)
+                       HostAndPort syncSource,
+                       const std::string& instanceId,
+                       OpTime lastSynced)
     : _replCoord(replicationCoordinator),
       _replicationCoordinatorExternalState(replicationCoordinatorExternalState),
-      _replicationProcess(replicationProcess) {}
+      _syncSourceHost(syncSource),
+      _lastOpTimeFetched(lastSynced) {}
 
-void GlobalSync::startup(OperationContext* opCtx) {
+void GlobalSync::startup() {
     invariant(!_producerThread);
     _producerThread.reset(new stdx::thread([this] { _run(); }));
 }
 
-void GlobalSync::shutdown(OperationContext* opCtx) {
+void GlobalSync::shutdown() {
     stdx::lock_guard<stdx::mutex> lock(_mutex);
 
     _state = ProducerState::Stopped;
@@ -206,7 +209,7 @@ void GlobalSync::shutdown(OperationContext* opCtx) {
     _inShutdown = true;
 }
 
-void GlobalSync::join(OperationContext* opCtx) {
+void GlobalSync::join() {
     _producerThread->join();
 }
 
@@ -229,7 +232,6 @@ void GlobalSync::_run() {
         } catch (const DBException& e) {
             std::string msg(str::stream() << "sync producer problem: " << redact(e));
             error() << msg;
-            _replCoord->setMyHeartbeatMessage(msg);
             sleepmillis(100);  // sleep a bit to keep from hammering this thread with temp. errors.
         } catch (const std::exception& e2) {
             // redact(std::exception&) doesn't work
@@ -247,6 +249,7 @@ void GlobalSync::_runProducer() {
         return;
     }
 
+    /*
     auto memberState = _replCoord->getMemberState();
     invariant(!memberState.rollback());
     invariant(!memberState.startup());
@@ -256,6 +259,7 @@ void GlobalSync::_runProducer() {
         sleepsecs(1);
         return;
     }
+    */
     // we want to start when we're no longer primary
     // start() also loads _lastOpTimeFetched, which we know is set from the "if"
     {
@@ -286,7 +290,7 @@ void GlobalSync::_produce() {
         return;
     }
 
-    _syncSourceHost = HostAndPort("localhost", CurrentSyncSourcePort);
+    // _syncSourceHost = HostAndPort("localhost", CurrentSyncSourcePort);
     log() << "MultiMaster _produce 1 using sync source " << _syncSourceHost;
     // this oplog reader does not do a handshake because we don't want the server it's syncing
     // from to track how far it has synced
@@ -489,12 +493,12 @@ void GlobalSync::_produce() {
             },
             onOplogFetcherShutdownCallbackFn,
             defaultBatchSize,
-            GlobalFetcher::StartingPoint::kEnqueueFirstDoc);
+            GlobalFetcher::StartingPoint::kSkipFirstDoc);
         /*
-        isMongoG ? GlobalFetcher::StartingPoint::kEnqueueFirstDoc :
-                   GlobalFetcher::StartingPoint::kSkipFirstDoc); // TODO: POC - make it more
-        intelligent.
-                   */
+            isMongoG ? GlobalFetcher::StartingPoint::kEnqueueFirstDoc :
+                       GlobalFetcher::StartingPoint::kSkipFirstDoc); // TODO: POC - make it more
+           intelligent.
+         */
         stdx::lock_guard<stdx::mutex> lock(_mutex);
         if (_state != ProducerState::Running) {
             log() << "MultiMaster producer state is not running";
@@ -752,6 +756,8 @@ void GlobalSync::_runRollbackViaRecoverToCheckpoint(
         }
     }
 
+    log() << "MultiMaster: skipping rollback, not implemented";
+    /*
     _rollback = stdx::make_unique<RollbackImpl>(
         localOplog, &remoteOplog, storageInterface, _replicationProcess, _replCoord);
 
@@ -765,6 +771,7 @@ void GlobalSync::_runRollbackViaRecoverToCheckpoint(
     } else {
         warning() << "Rollback failed with retryable error: " << status;
     }
+    */
 }
 
 void GlobalSync::_fallBackOnRollbackViaRefetch(
@@ -777,7 +784,8 @@ void GlobalSync::_fallBackOnRollbackViaRefetch(
     RollbackSourceImpl rollbackSource(
         getConnection, source, NamespaceString::kRsOplogNamespace.ns(), defaultRollbackBatchSize);
 
-    rollback(opCtx, *localOplog, rollbackSource, requiredRBID, _replCoord, _replicationProcess);
+    log() << "MultiMaster: skipping rollback, not implemented";
+    //  rollback(opCtx, *localOplog, rollbackSource, requiredRBID, _replCoord, _replicationProcess);
 }
 
 HostAndPort GlobalSync::getSyncTarget() const {
@@ -851,8 +859,11 @@ OpTime GlobalSync::_readLastAppliedOpTime(OperationContext* opCtx) {
                 Lock::DBLock lk(opCtx, "local", MODE_X);
                 // return Helpers::findOne(opCtx, NamespaceString::kRsOplogNamespace.ns().c_str(),
                 //    BSON( "ns" << mmCollName) ,oplogEntry);
-                return Helpers::getFirst(
-                    opCtx, NamespaceString::kRsOplogNamespace.ns().c_str(), oplogEntry);
+                return Helpers::getFirst(  // POC - using just some time in the past, needs to
+                                           // switch to global sync
+                    opCtx,
+                    NamespaceString::kRsOplogNamespace.ns().c_str(),
+                    oplogEntry);
             });
 
         if (!success) {

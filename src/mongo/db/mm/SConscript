@@ -36,6 +36,31 @@ env.Library(
 )
 
 env.Library(
+    target='global_initial_syncer',
+    source=[
+        'global_initial_syncer.cpp',
+    ],
+    LIBDEPS=[
+        '$BUILD_DIR/mongo/client/fetcher',
+        '$BUILD_DIR/mongo/db/commands/server_status_core',
+        '$BUILD_DIR/mongo/db/repl/collection_cloner',
+        '$BUILD_DIR/mongo/db/repl/database_cloner',
+        '$BUILD_DIR/mongo/db/repl/databases_cloner',
+        '$BUILD_DIR/mongo/db/repl/multiapplier',
+        '$BUILD_DIR/mongo/db/repl/oplog_application_interface',
+        '$BUILD_DIR/mongo/db/repl/oplog_buffer_blocking_queue',
+        '$BUILD_DIR/mongo/db/repl/oplog_entry',
+        '$BUILD_DIR/mongo/db/repl/oplog_fetcher',
+        '$BUILD_DIR/mongo/db/repl/optime',
+        '$BUILD_DIR/mongo/db/repl/rollback_checker',
+        '$BUILD_DIR/mongo/db/repl/storage_interface',
+    ],
+    LIBDEPS_PRIVATE=[
+        '$BUILD_DIR/mongo/db/commands/feature_compatibility_parsers',
+    ]
+)
+
+env.Library(
     target='global_fetcher',
     source=[
         'global_fetcher.cpp',

@@ -71,6 +71,8 @@ public:
     virtual void startThreads(const ReplSettings& settings) override;
     virtual void startSteadyStateReplication(OperationContext* opCtx,
                                              ReplicationCoordinator* replCoord) override;
+    virtual void startSteadyStateGlobalSync(OperationContext* opCtx,
+                                            ReplicationCoordinator* replCoord) override;
     virtual void stopDataReplication(OperationContext* opCtx) override;
 
     virtual bool isInitialSyncFlagSet(OperationContext* opCtx) override;

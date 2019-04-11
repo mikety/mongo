@@ -82,9 +82,11 @@ public:
      * The GlobalSync does not own any of the components referenced by the constructor
      * arguments. All these components must outlive the GlobalSync object.
      */
-    GlobalSync(ReplicationCoordinator* replicationCoordinator,
+    GlobalSync(ReplicationCoordinator* replCoord,
                ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
-               ReplicationProcess* replicationProcess);
+               HostAndPort syncSource,
+               const std::string& instanceId,
+               OpTime lastSynced);
 
     // stop syncing (when this node becomes a primary, e.g.)
     // During stepdown, the last fetched optime is not reset in order to keep track of the lastest
@@ -95,17 +97,17 @@ public:
     /**
      * Starts oplog buffer, task executor and producer thread, in that order.
      */
-    void startup(OperationContext* opCtx);
+    void startup();
 
     /**
      * Signals producer thread to stop.
      */
-    void shutdown(OperationContext* opCtx);
+    void shutdown();
 
     /**
      * Waits for producer thread to stop before shutting down the task executor and oplog buffer.
      */
-    void join(OperationContext* opCtx);
+    void join();
 
     /**
      * Returns true if shutdown() has been called.
@@ -135,6 +137,10 @@ public:
     ProducerState getState() const;
     // Starts the producer if it's stopped. Otherwise, let it keep running.
     void startProducerIfStopped();
+
+    const std::string& getInstanceId() {
+        return _instanceId;
+    }
 
 private:
     bool _inShutdown_inlock() const;
@@ -226,7 +232,6 @@ private:
     // Never hold the GlobalSync mutex when trying to acquire the ReplicationCoordinator mutex.
     mutable stdx::mutex _mutex;  // (S)
 
-    OpTime _lastOpTimeFetched;  // (M)
 
     // Thread running producerThread().
     std::unique_ptr<stdx::thread> _producerThread;  // (M)
@@ -241,6 +246,8 @@ private:
     ProducerState _state = ProducerState::Starting;  // (M)
 
     HostAndPort _syncSourceHost;  // (M)
+    std::string _instanceId;
+    OpTime _lastOpTimeFetched;  // (M)
 
     // Current sync source resolver validating sync source candidates.
     // Pointer may be read on any thread that locks _mutex or unlocked on the BGSync thread. It can

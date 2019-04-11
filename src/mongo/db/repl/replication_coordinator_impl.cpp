@@ -54,6 +54,7 @@
 #include "mongo/db/logical_clock.h"
 #include "mongo/db/logical_time.h"
 #include "mongo/db/logical_time_validator.h"
+#include "mongo/db/mm/global_initial_syncer.h"
 #include "mongo/db/operation_context_noop.h"
 #include "mongo/db/repl/check_quorum_for_config_change.h"
 #include "mongo/db/repl/data_replicator_external_state_initial_sync.h"
@@ -94,6 +95,9 @@
 #include "mongo/util/timer.h"
 
 namespace mongo {
+extern const bool isMongodWithGlobalSync;
+extern const bool isMongoG;
+
 namespace repl {
 
 MONGO_FAIL_POINT_DEFINE(stepdownHangBeforePerformingPostMemberStateUpdateActions);
@@ -318,6 +322,21 @@ ReplicationCoordinator::Mode getReplicationModeFromSettings(const ReplSettings& 
 InitialSyncerOptions createInitialSyncerOptions(
     ReplicationCoordinator* replCoord, ReplicationCoordinatorExternalState* externalState) {
     InitialSyncerOptions options;
+    options.getMyLastOptime = [replCoord]() { return replCoord->getMyLastAppliedOpTime(); };
+    options.setMyLastOptime = [replCoord, externalState](
+        const OpTime& opTime, ReplicationCoordinator::DataConsistency consistency) {
+        // Note that setting the last applied opTime forward also advances the global timestamp.
+        replCoord->setMyLastAppliedOpTimeForward(opTime, consistency);
+    };
+    options.resetOptimes = [replCoord]() { replCoord->resetMyLastOpTimes(); };
+    options.syncSourceSelector = replCoord;
+    options.oplogFetcherMaxFetcherRestarts =
+        externalState->getOplogFetcherInitialSyncMaxFetcherRestarts();
+    return options;
+}
+GlobalInitialSyncerOptions createGlobalInitialSyncerOptions(
+    ReplicationCoordinator* replCoord, ReplicationCoordinatorExternalState* externalState) {
+    GlobalInitialSyncerOptions options;
     options.getMyLastOptime = [replCoord]() { return replCoord->getMyLastAppliedOpTime(); };
     options.setMyLastOptime = [replCoord, externalState](
         const OpTime& opTime, ReplicationCoordinator::DataConsistency consistency) {
@@ -692,6 +711,7 @@ void ReplicationCoordinatorImpl::_startDataReplication(OperationContext* opCtx,
         return;
     }
 
+    log() << "_startDataReplication 0";
     // Do initial sync.
     if (!_externalState->getTaskExecutor()) {
         log() << "not running initial sync during test.";
@@ -763,6 +783,53 @@ void ReplicationCoordinatorImpl::_startDataReplication(OperationContext* opCtx,
     }
 }
 
+
+void ReplicationCoordinatorImpl::processReplSetStartGlobalSync(OperationContext* opCtx,
+                                                               BSONObjBuilder* result) {
+    if (isMongoG || isMongodWithGlobalSync) {
+        log() << "ReplicationCoordinatorImpl startGlobalSync";
+        _startGlobalReplication(opCtx);
+    }
+}
+
+void ReplicationCoordinatorImpl::_startGlobalReplication(OperationContext* opCtx) {
+
+    auto onGlobalInitialSyncCompletion = [this](const StatusWith<OpTime>& status) {
+        //    auto opCtxHolder = cc().makeOperationContext();
+        log() << "MultiMaster about to start global sync after initial global sync";
+        //    _externalState->startSteadyStateGlobalSync(opCtxHolder.get(), this);
+    };
+
+    log() << "_startGlobalReplication 1";
+
+    // TODO: most likely no need to use copy to start up outside of the lock
+    std::shared_ptr<MultiSyncer> multiSyncerCopy;
+    try {
+        {
+            // Must take the lock to set _initialSyncer, but not call it.
+            stdx::lock_guard<stdx::mutex> lock(_mutex);
+            multiSyncerCopy = std::make_shared<MultiSyncer>(
+                createGlobalInitialSyncerOptions(this, _externalState.get()),
+                stdx::make_unique<DataReplicatorExternalStateInitialSync>(this,
+                                                                          _externalState.get()),
+                this,
+                _externalState.get(),
+                onGlobalInitialSyncCompletion);
+            _multiSyncer = multiSyncerCopy;
+        }
+        // InitialSyncer::startup() must be called outside lock because it uses features (eg.
+        // setting the initial sync flag) which depend on the ReplicationCoordinatorImpl.
+        uassertStatusOK(multiSyncerCopy->startup(numInitialSyncAttempts.load()));
+    } catch (...) {
+        auto status = exceptionToStatus();
+        log() << "Global Initial Sync failed to start: " << status;
+        if (ErrorCodes::CallbackCanceled == status || ErrorCodes::isShutdownError(status.code())) {
+            return;
+        }
+        fassertFailedWithStatusNoTrace(51095, status);
+    }
+}
+
 void ReplicationCoordinatorImpl::startup(OperationContext* opCtx) {
     if (!isReplEnabled()) {
         if (ReplSettings::shouldRecoverFromOplogAsStandalone()) {
@@ -828,6 +895,7 @@ void ReplicationCoordinatorImpl::shutdown(OperationContext* opCtx) {
 
     // Used to shut down outside of the lock.
     std::shared_ptr<InitialSyncer> initialSyncerCopy;
+    std::shared_ptr<MultiSyncer> multiSyncerCopy;
     {
         stdx::unique_lock<stdx::mutex> lk(_mutex);
         fassert(28533, !_inShutdown);
@@ -849,6 +917,7 @@ void ReplicationCoordinatorImpl::shutdown(OperationContext* opCtx) {
         _opTimeWaiterList.signalAll_inlock();
         _currentCommittedSnapshotCond.notify_all();
         _initialSyncer.swap(initialSyncerCopy);
+        _multiSyncer.swap(multiSyncerCopy);
     }
 
 
@@ -861,6 +930,16 @@ void ReplicationCoordinatorImpl::shutdown(OperationContext* opCtx) {
         }
         initialSyncerCopy->join();
         initialSyncerCopy.reset();
+    }
+    // joining the replication executor is blocking so it must be run outside of the mutex
+    if (multiSyncerCopy) {
+        log() << "ReplicationCoordinatorImpl::shutdown calling GlobalMultuSyncer::shutdown.";
+        const auto status = multiSyncerCopy->shutdown();
+        if (!status.isOK()) {
+            warning() << "GlobalMultiSyncer shutdown failed: " << status;
+        }
+        multiSyncerCopy->join();
+        multiSyncerCopy.reset();
     }
     _externalState->shutdown(opCtx);
     _replExecutor->shutdown();

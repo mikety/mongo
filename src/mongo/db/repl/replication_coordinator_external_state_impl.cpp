@@ -226,6 +226,16 @@ bool ReplicationCoordinatorExternalStateImpl::isInitialSyncFlagSet(OperationCont
     return _replicationProcess->getConsistencyMarkers()->getInitialSyncFlag(opCtx);
 }
 
+void ReplicationCoordinatorExternalStateImpl::startSteadyStateGlobalSync(
+    OperationContext* opCtx, ReplicationCoordinator* replCoord) {
+    /*
+    _globalSync = std::make_unique<GlobalSync>(replCoord, this, _replicationProcess);
+
+    log() << "Starting multi master fetcher thread";
+    _globalSync->startup();
+    */
+}
+
 // This function acquires the LockManager locks on oplog, so it cannot be called while holding
 // ReplicationCoordinatorImpl's mutex.
 void ReplicationCoordinatorExternalStateImpl::startSteadyStateReplication(
@@ -266,13 +276,8 @@ void ReplicationCoordinatorExternalStateImpl::startSteadyStateReplication(
     invariant(!_bgSync);
     _bgSync =
         std::make_unique<BackgroundSync>(replCoord, this, _replicationProcess, _oplogApplier.get());
-    _globalSync = std::make_unique<GlobalSync>(replCoord, this, _replicationProcess);
-
     log() << "Starting replication fetcher thread";
     _bgSync->startup(opCtx);
-
-    log() << "Starting multi master fetcher thread";
-    _globalSync->startup(opCtx);
 
     log() << "Starting replication applier thread";
     _oplogApplierShutdownFuture = _oplogApplier->startup();

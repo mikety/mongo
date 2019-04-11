@@ -551,6 +551,7 @@ public:
      */
     virtual Status resyncData(OperationContext* opCtx, bool waitUntilCompleted) = 0;
 
+    virtual void processReplSetStartGlobalSync(OperationContext* opCtx, BSONObjBuilder* result) = 0;
     /**
      * Handles an incoming isMaster command for a replica set node.  Should not be
      * called on a standalone node.

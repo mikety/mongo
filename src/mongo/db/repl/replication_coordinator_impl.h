@@ -36,6 +36,7 @@
 #include "mongo/base/status.h"
 #include "mongo/bson/timestamp.h"
 #include "mongo/db/concurrency/d_concurrency.h"
+#include "mongo/db/mm/global_initial_syncer.h"
 #include "mongo/db/repl/initial_syncer.h"
 #include "mongo/db/repl/member_state.h"
 #include "mongo/db/repl/optime.h"
@@ -313,7 +314,14 @@ public:
 
     virtual void attemptToAdvanceStableTimestamp() override;
 
+    virtual void processReplSetStartGlobalSync(OperationContext* opCtx,
+                                               BSONObjBuilder* result) override;
     // ================== Test support API ===================
+
+    /**
+     * Start global replication with global initial sync if needed first.
+     */
+    void _startGlobalReplication(OperationContext* opCtx);
 
     /**
      * If called after startReplication(), blocks until all asynchronous
@@ -1351,6 +1359,8 @@ private:
     // InitialSyncer used for initial sync.
     std::shared_ptr<InitialSyncer>
         _initialSyncer;  // (I) pointer set under mutex, copied by callers.
+
+    std::shared_ptr<MultiSyncer> _multiSyncer;  // (I) pointer set under mutex, copied by callers.
 
     // Hands out the next snapshot name.
     AtomicWord<unsigned long long> _snapshotNameGenerator;  // (S)
