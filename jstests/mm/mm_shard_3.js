@@ -40,6 +40,15 @@
     assert.commandWorked(st.shard1.getDB(dbName).createCollection(collName));
     assert.commandWorked(st.shard2.getDB(dbName).createCollection(collName));
 
+    assert.commandWorked(
+        st.configRS.getPrimary().getDB("admin").runCommand({replSetStartGlobalSync: 1}));
+
+    assert.commandWorked(st.shard0.getDB("admin").runCommand({replSetStartGlobalSync: 1}));
+
+    assert.commandWorked(st.shard1.getDB("admin").runCommand( {replSetStartGlobalSync: 1}));
+
+    assert.commandWorked(st.shard2.getDB("admin").runCommand( {replSetStartGlobalSync: 1}));
+
     let shard0coll = st.shard0.getDB(dbName).getCollection(collName);
     let shard1coll = st.shard1.getDB(dbName).getCollection(collName);
     jsTestLog("Inserting in the shard0");
@@ -61,7 +70,6 @@
     }
     sleep(5000);
 
-    /*
     jsTestLog("Updating on the shard1");
     for (let i = nDocs + 1; i <= nDocs + nDocs; ++i) {
         assert.commandWorked(shard1coll.updateOne({_id: i}, {$set: {val: "Y_1_1"}}));
@@ -79,22 +87,9 @@
         assert.commandWorked(shard0coll.updateOne({_id: i}, {$set: {val: "X_0_2"}}));
     }
     sleep(5000);
-*/
-    assert.commandWorked(
-        st.configRS.getPrimary().getDB("admin").runCommand({replSetStartGlobalSync: 1}));
-    sleep(5000);
 
     res = assert.commandWorked(globalDB.runCommand({find: "oplog_global"}));
     jsTestLog("Printing: Global Oplog: " + tojson(res));
-
-    assert.commandWorked(st.shard0.getDB("admin").runCommand({replSetStartGlobalSync: 1}));
-    sleep(5000);
-
-    //    assert.commandWorked(st.shard1.getDB("admin").runCommand( {replSetStartGlobalSync: 1}));
-    //    sleep(5000);
-
-    //   assert.commandWorked(st.shard2.getDB("admin").runCommand( {replSetStartGlobalSync: 1}));
-    //   sleep(5000);
 
     res = assert.commandWorked(st.rs0.getPrimary().getDB("local").runCommand({find: "oplog.rs"}));
     jsTestLog("Printing: Shard0  Oplog: " + tojson(res));

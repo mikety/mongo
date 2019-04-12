@@ -160,11 +160,7 @@ bool DataReplicatorExternalStateGlobalSync::shouldStopFetching(
     const HostAndPort& source,
     const rpc::ReplSetMetadata& replMetadata,
     boost::optional<rpc::OplogQueryMetadata> oqMetadata) {
-    if (_globalSync->shouldStopFetching()) {
-        return true;
-    }
-
-    return isMongoG ? true : false;  // because config server needs to sync from multiple sources
+    return _globalSync->shouldStopFetching();
     // return DataReplicatorExternalStateImpl::shouldStopFetching(source, replMetadata, oqMetadata);
 }
 
@@ -182,6 +178,7 @@ GlobalSync::GlobalSync(ReplicationCoordinator* replicationCoordinator,
     : _replCoord(replicationCoordinator),
       _replicationCoordinatorExternalState(replicationCoordinatorExternalState),
       _syncSourceHost(syncSource),
+      _instanceId(instanceId),
       _lastOpTimeFetched(lastSynced) {}
 
 void GlobalSync::startup() {

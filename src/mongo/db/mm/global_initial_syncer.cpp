@@ -479,7 +479,9 @@ std::string GlobalInitialSyncer::getDiagnosticString() const {
 
 BSONObj GlobalInitialSyncer::getInitialSyncProgress() const {
     LockGuard lk(_mutex);
-    return _getInitialSyncProgress_inlock();
+    log() << "MultiMaster getInitialSyncProgress";
+    return BSON("ok" << 1);
+//    return _getInitialSyncProgress_inlock();
 }
 
 void GlobalInitialSyncer::_appendInitialSyncProgressMinimal_inlock(BSONObjBuilder* bob) const {
@@ -1496,12 +1498,12 @@ void GlobalInitialSyncer::_finishInitialSyncAttempt(const StatusWith<OpTime>& la
     log() << "Initial sync attempt finishing up.";
 
     stdx::lock_guard<stdx::mutex> lock(_mutex);
-    log() << "Initial Sync Attempt Statistics: " << redact(_getInitialSyncProgress_inlock());
+  /*  log() << "Initial Sync Attempt Statistics: " << redact(_getInitialSyncProgress_inlock());
 
     auto runTime = _initialSyncState ? _initialSyncState->timer.millis() : 0;
     _stats.initialSyncAttemptInfos.emplace_back(
         GlobalInitialSyncer::InitialSyncAttemptInfo{runTime, result.getStatus(), _syncSource});
-
+*/
     if (result.isOK()) {
         // Scope guard will invoke _finishCallback().
         return;
@@ -1530,7 +1532,6 @@ void GlobalInitialSyncer::_finishInitialSyncAttempt(const StatusWith<OpTime>& la
         // Scope guard will invoke _finishCallback().
         return;
     }
-
     auto when = _exec->now() + _opts.initialSyncRetryWait;
     auto status = _scheduleWorkAtAndSaveHandle_inlock(
         when,

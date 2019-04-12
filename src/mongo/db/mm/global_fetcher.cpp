@@ -74,7 +74,7 @@ const Milliseconds maximumAwaitDataTimeoutMS(30 * 1000);
  */
 BSONObj makeGetMoreCommandObject(const NamespaceString& nss,
                                  CursorId cursorId,
-                                 OpTimeWithTerm lastCommittedWithCurrentTerm,
+                                 OpTime lastFetched,
                                  Milliseconds fetcherMaxTimeMS,
                                  int batchSize) {
     BSONObjBuilder cmdBob;
@@ -538,6 +538,17 @@ StatusWith<BSONObj> GlobalFetcher::_onSuccessfulBatch(const Fetcher::QueryRespon
 
     if (_dataReplicatorExternalState->shouldStopFetching(
             _getSource(), replSetMetadata, oqMetadata)) {
+        log() << "MultiMaster _onSuccessfulBatch 6 stop fetching ";
+    }
+
+    return makeGetMoreCommandObject(queryResponse.nss,
+                                    queryResponse.cursorId,
+                                    lastFetched,
+                                    _getGetMoreMaxTime(),
+                                    _batchSize);
+    /*
+    if (_dataReplicatorExternalState->shouldStopFetching(
+            _getSource(), replSetMetadata, oqMetadata)) {
         str::stream errMsg;
         errMsg << "sync source " << _getSource().toString();
         errMsg << " (config version: " << replSetMetadata.getConfigVersion();
@@ -563,6 +574,7 @@ StatusWith<BSONObj> GlobalFetcher::_onSuccessfulBatch(const Fetcher::QueryRespon
                                     lastCommittedWithCurrentTerm,
                                     _getGetMoreMaxTime(),
                                     _batchSize);
+    */
 }
 }  // namespace repl
 }  // namespace mongo
