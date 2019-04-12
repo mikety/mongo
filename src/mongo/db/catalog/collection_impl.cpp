@@ -61,6 +61,7 @@
 #include "mongo/db/keypattern.h"
 #include "mongo/db/logical_clock.h"
 #include "mongo/db/matcher/expression_parser.h"
+#include "mongo/db/mm/global_apply_tracker.h"
 #include "mongo/db/op_observer.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/db/ops/update_request.h"
@@ -426,7 +427,9 @@ Status CollectionImpl::insertDocuments(OperationContext* opCtx,
         Timestamp remoteTs;
         if (useNewDocs) {
             BSONObjBuilder oBuilder;
+            bool isRemote = GlobalApplyTracker::get(opCtx).isRemote();
             log() << "MultiMaster insertDocuments prepared newDoc before: " << newDoc;
+            log() << "MultiMaster insertDocuments isRemote: " << isRemote;
             if (newDoc.hasElement("_history")) {
                 oBuilder.append(newDoc.getField("_id"));
                 oBuilder.append(newDoc.getField("val"));

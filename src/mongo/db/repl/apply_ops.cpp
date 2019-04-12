@@ -46,6 +46,7 @@
 #include "mongo/db/dbdirectclient.h"
 #include "mongo/db/index/index_descriptor.h"
 #include "mongo/db/matcher/matcher.h"
+#include "mongo/db/mm/global_apply_tracker.h"
 #include "mongo/db/op_observer.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/db/query/collation/collation_spec.h"
@@ -507,6 +508,7 @@ Status applyOps(OperationContext* opCtx,
         log() << "MultiMaster hacking applyOps " << applyOpCmd;
         {
             repl::UnreplicatedWritesBlock uwb(opCtx);
+            GlobalApplyTracker::get(opCtx).setIsRemote(true);
             auto status = _applyOps(opCtx,
                                     dbName,
                                     applyOpCmd,

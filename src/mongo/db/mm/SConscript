@@ -64,6 +64,7 @@ env.Library(
     target='global_fetcher',
     source=[
         'global_fetcher.cpp',
+        'global_apply_tracker.cpp',
     ],
     LIBDEPS=[
         '$BUILD_DIR/mongo/db/repl/abstract_oplog_fetcher',
