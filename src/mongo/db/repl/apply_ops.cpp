@@ -45,6 +45,7 @@
 #include "mongo/db/db_raii.h"
 #include "mongo/db/dbdirectclient.h"
 #include "mongo/db/index/index_descriptor.h"
+#include "mongo/db/logical_clock.h"
 #include "mongo/db/matcher/matcher.h"
 #include "mongo/db/mm/global_apply_tracker.h"
 #include "mongo/db/op_observer.h"
@@ -132,6 +133,7 @@ Status _applyOps(OperationContext* opCtx,
         Status status(ErrorCodes::InternalError, "");
 
         if (haveWrappingWUOW) {
+            log() << "MultiMaster _applyOps 3";
             // Only CRUD operations are allowed in atomic mode.
             invariant(*opType != 'c');
 
@@ -200,6 +202,7 @@ Status _applyOps(OperationContext* opCtx,
                 }
             }
         } else {
+            log() << "MultiMaster _applyOps 4";
             try {
                 status = writeConflictRetry(
                     opCtx,
@@ -207,10 +210,16 @@ Status _applyOps(OperationContext* opCtx,
                     nss.ns(),
                     [opCtx, nss, opObj, opType, alwaysUpsert, oplogApplicationMode] {
                         BSONObjBuilder builder;
+                        // MM POC hack to avoid having WT error(22) - TIMESTAMP
+                        // builder.append(OplogEntry::kTimestampFieldName, Timestamp());
+
                         builder.appendElements(opObj);
+                        /*
                         if (!builder.hasField(OplogEntry::kTimestampFieldName)) {
+                            log() << "MultiMaster _applyOps adding empty timestamp";
                             builder.append(OplogEntry::kTimestampFieldName, Timestamp());
                         }
+                        */
                         if (!builder.hasField(OplogEntry::kHashFieldName)) {
                             builder.append(OplogEntry::kHashFieldName, 0LL);
                         }
@@ -278,7 +287,7 @@ Status _applyOps(OperationContext* opCtx,
         return Status(ErrorCodes::UnknownError, "applyOps had one or more errors applying ops");
     }
 
-    log() << "MultiMaster _applyOps 3";
+    log() << "MultiMaster _applyOps 5";
     return Status::OK();
 }
 
@@ -505,19 +514,18 @@ Status applyOps(OperationContext* opCtx,
     }
 
     {
-        log() << "MultiMaster hacking applyOps " << applyOpCmd;
+        log() << "MultiMaster hacking applyOps dbName: " << dbName << " cmd: " << applyOpCmd;
         {
             repl::UnreplicatedWritesBlock uwb(opCtx);
             GlobalApplyTracker::get(opCtx).setIsRemote(true);
-            auto status = _applyOps(opCtx,
-                                    dbName,
-                                    applyOpCmd,
-                                    info,
-                                    oplogApplicationMode,
-                                    result,
-                                    &numApplied,
-                                    nullptr);
-            log() << "MultiMaster hacking applyOps status: " << status;
+            uassertStatusOK(_applyOps(opCtx,
+                                      dbName,
+                                      applyOpCmd,
+                                      info,
+                                      oplogApplicationMode,
+                                      result,
+                                      &numApplied,
+                                      nullptr));
         }
         auto opObserver = getGlobalServiceContext()->getOpObserver();
         invariant(opObserver);

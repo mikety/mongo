@@ -198,6 +198,96 @@ StatusWith<CollectionImpl::ValidationAction> _parseValidationAction(StringData n
     MONGO_UNREACHABLE;
 }
 
+// find the least common ancestor
+// most likely need to add a hash to the elems to facilitate the matches.
+// for now use ts.
+auto _findLCA(const std::vector<BSONElement>& v1, const std::vector<BSONElement>& v2) {
+    std::map<Timestamp, std::vector<BSONElement>::const_reverse_iterator> path;
+    for (auto it = v1.rbegin(); it != v1.rend(); it++) {
+        auto ts = it->Obj().getField("_t").timestamp();
+        auto ret = path.insert(std::make_pair(ts, it));
+    }
+
+    for (auto it = v2.rbegin(); it != v2.rend(); it++) {
+        auto ts = it->Obj().getField("_t").timestamp();
+
+        auto res = path.find(ts);
+        if (res != path.end()) {
+            return std::make_pair(res->second, it);
+        }
+    }
+
+    return std::make_pair(v1.crend(), v2.crend());
+}
+
+// conflict is detected if there is an update of the remote version that
+// has the same version as the current update 2 situations: both the change is remote
+// a) - local(old) - remote(new) conflicting version
+// b) - remote(old) - remote(new) conflicting version
+bool _isUpdateHasConflict(const std::string& source,
+                          Timestamp ts,
+                          const std::vector<BSONElement>& oldHist,
+                          const std::vector<BSONElement>& newHist) {
+
+
+    auto lcaPair = _findLCA(oldHist, newHist);  // Least common ancestor
+
+    /*
+    int oldVersion(-1);
+    bool isLatestOldChangeRemote = false;
+
+    const auto& lastOld = oldHist.crbegin();
+    if (lastOld != oldHist.crend()) {
+        int v = lastOld->getField("_v").Int();
+        if (oldVersion == -1) {
+            oldVersion = v;
+        }
+        if (source != lastOld->getField("_s").String()) {
+            isLatestOldChangeRemote = true;
+        }
+    }
+
+    BSONElement lastOldChange;
+    for (const auto& it = oldHist.crbegin(); it != oldHist.crend(); it++) {
+        if (it->getField("_v").Int() <= version &&
+            it->getField("_s").String() == it->getField("_o").String()) { // this is when the change
+    was made in the old history
+            lastOldChange = *it;
+        }
+    }
+
+    int newVersion(-1);
+    bool isLatestNewChangeRemote = false;
+
+    const auto& lastNew = newHist.crbegin();
+    if (lastNew != newHist.crend()) {
+        int v = lastNew->getField("_v").Int();
+        if (newVersion == -1) {
+            newVersion = v;
+        }
+        if (source != lastNew->getField("_s").String()) {
+            isLatestNewChangeRemote = true;
+        }
+    }
+
+    BSONElement lastNewChange;
+    for (const auto& it = newHist.crbegin(); it != newHist.crend(); it++) {
+        if (it->getField("_v").Int() <= version &&
+            it->getField("_s").String() == it->getField("_o").String()) { // this is when the change
+    was made in the new history
+            lastNewChange = *it;
+        }
+    }
+
+
+    if (lastNewChange.getField("_s") != lastOldChange.getField("_s")) {
+        return true;
+    }
+
+    */
+    return false;
+}
+
 }  // namespace
 
 using std::endl;
@@ -454,11 +544,14 @@ Status CollectionImpl::insertDocuments(OperationContext* opCtx,
                     arrBuilder.append(currElem);
                 }
             }
+            if (!isRemote) {
+                origSource = source;
+            }
             BSONObjBuilder tBuilder;
             tBuilder.append("_v", 0);
             tBuilder.append("_s", source);
             tBuilder.append("_o", origSource);
-            tBuilder.append("_t", remoteTs.isNull() ? localTs : remoteTs);
+            tBuilder.append("_t", (!isRemote || remoteTs.isNull()) ? localTs : remoteTs);
             arrBuilder.append(tBuilder.done().getOwned());
             oBuilder.append("_history", BSONArray(arrBuilder.done().getOwned()));
             newDoc = oBuilder.done().getOwned();
@@ -752,24 +845,41 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
 
     auto argsCopy = *args;
     if (isMongodWithGlobalSync && ns().coll() == mmCollName && ns().db() == mmDbName) {
+        bool isRemote = GlobalApplyTracker::get(opCtx).isRemote();
         log() << "MultiMaster updateDocument check. Old doc: " << oldDoc.value()
-              << " newDoc: " << newDoc;
+              << " newDoc: " << newDoc << ", isRemote: " << isRemote;
         std::string source = constructInstanceId();
         std::string oSource = source;
         std::string sSource;
-        auto newHistory = BSONArray(newDoc.getField("_history").Obj());
-        auto oldHistory = BSONArray(oldDoc.value().getField("_history").Obj());
+        // auto newHistory = BSONArray(newDoc.getField("_history").Obj());
+        auto newHistVec = newDoc.getField("_history").Array();
+        // auto oldHistory = BSONArray(oldDoc.value().getField("_history").Obj());
+        auto oldHistVec = oldDoc.value().getField("_history").Array();
 
-        BSONArrayIteratorSorted newHistIt(newHistory);
-        BSONArrayIteratorSorted oldHistIt(oldHistory);
+        // BSONArrayIteratorSorted newHistIt(newHistory);
+        // BSONArrayIteratorSorted oldHistIt(oldHistory);
         BSONArrayBuilder histBuilder;
         int version(0);
         int curVersion(0);
         auto localTs = LogicalClock::get(opCtx)->getClusterTime().asTimestamp();
         Timestamp ts;
         // bypass common prefix in the new and the old history and find the latest change timestamp
-        while (oldHistIt.more()) {
-            auto oldHistElem = oldHistIt.next().Obj().getOwned();
+
+        /*
+        std::vector<BSONElement> oldHistVec;
+        auto oldHistVecIt = oldHistVec.begin();
+        auto newHistVecIt = newHistVec.begin();
+        */
+        std::map<Timestamp, int> oldHistMap;
+        std::map<Timestamp, int> newHistMap;
+        // while (oldHistIt.more()) {
+        decltype(oldHistVec)::size_type oldPos = 0;
+        decltype(newHistVec)::size_type newPos = 0;
+        for (oldPos = 0; oldPos < oldHistVec.size(); ++oldPos) {
+            //            auto oldHistElem = oldHistIt.next().Obj().getOwned();
+            auto oldHistElem = oldHistVec.at(oldPos).Obj();
+
+
             if (oldHistElem.hasField("_o")) {
                 oSource = oldHistElem.getField("_o").String();
             }
@@ -780,26 +890,42 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
             if (oldHistElem.hasField("_s")) {
                 sSource = oldHistElem.getField("_s").String();
             }
-            if (oSource == sSource && oldHistElem.hasField("_t")) {
+            if (!isRemote && oldHistElem.hasField("_t")) {
                 auto curTs = oldHistElem.getField("_t").timestamp();
                 ts = std::max(curTs, ts);
             }
 
-            if (newHistIt.more()) {
-                auto newHistElem = newHistIt.next().Obj().getOwned();
+            //           if (newHistIt.more()) {
+            if (newPos < newHistVec.size()) {
+                //                auto newHistElem = newHistIt.next().Obj().getOwned();
+                auto newHistElem = newHistVec.at(newPos).Obj();
                 if (newHistElem.hasField("_v")) {
                     version = std::max(version, newHistElem.getField("_v").Int());
                 }
                 if (oldHistElem.woCompare(newHistElem) != 0) {
-                    log() << "MM WTF?? oldHist is not matching new hist!";
-                    histBuilder.append(newHistElem);
+                    // this is the case when the local host will overwrite its local copy with
+                    // the remote update, which makes sence, but needs more investigation.
+                    // It also happens when there is a  conflict on two updates on different nodes
+                    // not including this.
+                    log() << "MultiMaster while in OldHist adding an element from new Hist: "
+                          << newHistElem
+                          << " not matching  an element from old Hist: " << oldHistElem;
+                    histBuilder.append(oldHistElem.getOwned());
+                    histBuilder.append(newHistElem.getOwned());
                 } else {
-                    histBuilder.append(oldHistElem);
+                    log() << "MultiMaster  adding an element from old Hist: " << newHistElem;
+                    histBuilder.append(oldHistElem.getOwned());
                 }
+                newHistMap[newHistElem.getField("_t").timestamp()] = newPos;
+                ++newPos;
             }
+            //        oldHistVecIt = oldHistVec.insert(oldHistVecIt, std::move(oldHistElem));
+            oldHistMap[oldHistElem.getField("_t").timestamp()] = oldPos;
         }
-        while (newHistIt.more()) {
-            auto newHistElem = newHistIt.next().Obj().getOwned();
+        //    while (newHistIt.more()) {
+        while (newPos < newHistVec.size()) {
+            //        auto newHistElem = newHistIt.next().Obj().getOwned();
+            auto newHistElem = newHistVec.at(newPos).Obj();
             if (newHistElem.hasField("_v")) {
                 version = std::max(version, newHistElem.getField("_v").Int());
             }
@@ -813,49 +939,83 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
                 auto curTs = newHistElem.getField("_t").timestamp();
                 ts = std::max(curTs, ts);
             }
-            histBuilder.append(newHistElem);
+            log() << "MultiMaster  adding an element from new Hist: " << newHistElem;
+            newHistMap[newHistElem.getField("_t").timestamp()] = newPos;
+            histBuilder.append(newHistElem.getOwned());
+            ++newPos;
         }
-        BSONObjBuilder tBuilder;
-        // if the prev history source is the same as this host its a local update, so compute new
-        // version
-        // and update original source to current.
-        // otherwise its an application of the oplog, so do not change the version and original
-        // source
-        if (sSource == source) {
-            version++;
-            oSource = source;
-            ts = localTs;
-        }
-        tBuilder.append("_v", version);
-        tBuilder.append("_s", source);
-        tBuilder.append("_o", oSource);
-        tBuilder.append("_t", ts);
-        auto lastHistObj = tBuilder.done();
-        log() << "MultiMatster: updated version to " << version << " in the " << lastHistObj;
-        histBuilder.append(lastHistObj);
 
-        BSONObjBuilder oBuilder;
-        auto newHistoryArr = histBuilder.arr();
-        oBuilder.append(newDoc.getField("_id"));
-        oBuilder.append(newDoc.getField("val"));
-        oBuilder.append("_history", newHistoryArr);
-        newVersionedDoc = oBuilder.done().getOwned();
-        isUpdated = true;
-        log() << "Multimaster: updated doc: " << newVersionedDoc;
-        if (isUpdated) {  // POC hack to keep the history with updates so it gets to the global
-                          // oplog
-            auto update = args->update.getOwned();
-            BSONObjBuilder setBuilder;
-            setBuilder.appendElements(update.getField("$set").Obj());
-            setBuilder.append("_history", newHistoryArr);
-            auto newSet = setBuilder.done().getOwned();
-            // argsCopy.update = newSet;
-            log() << "args old update: " << argsCopy.update;
-            BSONObjBuilder updateBuilder;
-            updateBuilder.append(update.getField("$v"));
-            updateBuilder.append("$set", newSet);
-            argsCopy.update = updateBuilder.done().getOwned();
-            log() << "args new update: " << argsCopy.update;
+        bool hasConflict = false;  // isRemote ?_isUpdateHasConflict(source, localTs, oldHistory,
+                                   // newHistory) : false;
+        // find a conflict look back to find if the proposed version was already set on this node
+        if (isRemote) {
+            int tmpVer = version;
+            for (newPos = 0; newPos < newHistVec.size(); ++newPos) {
+                auto newHistObj = newHistVec.at(newPos).Obj();
+                if (tmpVer <= newHistObj.getField("_v").Int() &&
+                    source != newHistObj.getField("_o").String() &&
+                    newHistObj.getField("_o").String() == newHistObj.getField("_s").String()) {
+                    hasConflict = true;
+                    log() << "MultiMaster Conflict Detected for the history starting at: "
+                          << newHistObj;
+                }
+            }
+        }
+
+
+        bool shouldAcceptUpdate{true};
+
+        if (hasConflict) {
+            // add to the conflicts collectoin
+            log() << "MultiMaster update found conflict";
+
+            // shouldAcceptUpdate = _shouldAcceptUpdate();
+        }
+
+        if (sSource == source) {
+            if (shouldAcceptUpdate) {
+                version++;
+                oSource = source;
+                ts = localTs;
+            } else {  // Conflict with remote version
+                // Fail the local update
+                // uassert();
+            }
+        }
+
+        if (shouldAcceptUpdate) {
+            BSONObjBuilder tBuilder;
+            tBuilder.append("_v", version);
+            tBuilder.append("_s", source);
+            tBuilder.append("_o", oSource);
+            tBuilder.append("_t", ts);
+            auto lastHistObj = tBuilder.done();
+            log() << "MultiMatster: updated version to " << version << " in the " << lastHistObj;
+            histBuilder.append(lastHistObj);
+
+            auto newHistoryArr = histBuilder.arr();
+            BSONObjBuilder oBuilder;
+            oBuilder.append(newDoc.getField("_id"));
+            oBuilder.append(newDoc.getField("val"));
+            oBuilder.append("_history", newHistoryArr);
+            newVersionedDoc = oBuilder.done().getOwned();
+            log() << "Multimaster: updated doc: " << newVersionedDoc;
+            isUpdated = true;
+            if (isUpdated) {  // POC hack to keep the history with updates so it gets to the global
+                              // oplog
+                auto update = args->update.getOwned();
+                BSONObjBuilder setBuilder;
+                setBuilder.appendElements(update.getField("$set").Obj());
+                setBuilder.append("_history", newHistoryArr);
+                auto newSet = setBuilder.done().getOwned();
+                // argsCopy.update = newSet;
+                log() << "args old update: " << argsCopy.update;
+                BSONObjBuilder updateBuilder;
+                updateBuilder.append(update.getField("$v"));
+                updateBuilder.append("$set", newSet);
+                argsCopy.update = updateBuilder.done().getOwned();
+                log() << "args new update: " << argsCopy.update;
+            }
         }
     }
 

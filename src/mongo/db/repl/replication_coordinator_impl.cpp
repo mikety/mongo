@@ -803,20 +803,19 @@ public:
     bool shouldStopFetching(const HostAndPort& source,
                             const rpc::ReplSetMetadata& replMetadata,
                             boost::optional<rpc::OplogQueryMetadata> oqMetadata) override;
-
 };
 
 DataReplicatorExternalStateInitialGlobalSync::DataReplicatorExternalStateInitialGlobalSync(
     ReplicationCoordinator* replicationCoordinator,
     ReplicationCoordinatorExternalState* replicationCoordinatorExternalState)
-    : DataReplicatorExternalStateImpl(replicationCoordinator, replicationCoordinatorExternalState)
-{}
+    : DataReplicatorExternalStateImpl(replicationCoordinator, replicationCoordinatorExternalState) {
+}
 
 bool DataReplicatorExternalStateInitialGlobalSync::shouldStopFetching(
     const HostAndPort& source,
     const rpc::ReplSetMetadata& replMetadata,
     boost::optional<rpc::OplogQueryMetadata> oqMetadata) {
-    return true; // for now just stop
+    return true;  // for now just stop
 }
 
 void ReplicationCoordinatorImpl::_startGlobalReplication(OperationContext* opCtx) {
@@ -837,8 +836,8 @@ void ReplicationCoordinatorImpl::_startGlobalReplication(OperationContext* opCtx
             stdx::lock_guard<stdx::mutex> lock(_mutex);
             multiSyncerCopy = std::make_shared<MultiSyncer>(
                 createGlobalInitialSyncerOptions(this, _externalState.get()),
-                stdx::make_unique<DataReplicatorExternalStateInitialGlobalSync>(this,
-                                                                          _externalState.get()),
+                stdx::make_unique<DataReplicatorExternalStateInitialGlobalSync>(
+                    this, _externalState.get()),
                 this,
                 _externalState.get(),
                 onGlobalInitialSyncCompletion);

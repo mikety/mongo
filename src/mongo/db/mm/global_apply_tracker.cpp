@@ -21,7 +21,7 @@
 
 namespace mongo {
 
-const OperationContext::Decoration<GlobalApplyTracker> GlobalApplyTracker::get = 
+const OperationContext::Decoration<GlobalApplyTracker> GlobalApplyTracker::get =
     OperationContext::declareDecoration<GlobalApplyTracker>();
 
-} // namespace mongo
+}  // namespace mongo

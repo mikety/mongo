@@ -166,10 +166,10 @@ public:
     };
 
     GlobalInitialSyncer(GlobalInitialSyncerOptions opts,
-                  DataReplicatorExternalState* dataReplicatorExternalState,
-                  HostAndPort syncerSource,
-                  const std::string& instanceId,
-                  OnCompletionInitialSyncFn onCompletion);
+                        DataReplicatorExternalState* dataReplicatorExternalState,
+                        HostAndPort syncerSource,
+                        const std::string& instanceId,
+                        OnCompletionInitialSyncFn onCompletion);
 
     virtual ~GlobalInitialSyncer();
 
@@ -230,7 +230,10 @@ public:
      */
     State getState_forTest() const;
 
-    const std::string& getInstanceId() { return _instanceId; }
+    const std::string& getInstanceId() {
+        return _instanceId;
+    }
+
 private:
     /**
      * Returns true if we are still processing initial sync tasks (_state is either Running or
@@ -426,7 +429,7 @@ private:
      * Callback for oplog fetcher.
      */
     void _globalFetcherCallback(const Status& status,
-                               std::shared_ptr<OnCompletionGuard> onCompletionGuard);
+                                std::shared_ptr<OnCompletionGuard> onCompletionGuard);
 
     /**
      * Callback for DatabasesCloner.
@@ -591,13 +594,13 @@ private:
     // (MX) Must hold _mutex and be in a callback in _exec to write; must either hold
     //      _mutex or be in a callback in _exec to read.
 
-    mutable stdx::mutex _mutex;                                                 // (S)
-    const GlobalInitialSyncerOptions _opts;                                           // (R)
+    mutable stdx::mutex _mutex;                                 // (S)
+    const GlobalInitialSyncerOptions _opts;                     // (R)
     DataReplicatorExternalState* _dataReplicatorExternalState;  // (R)
-    executor::TaskExecutor* _exec;                                              // (R)
-    ThreadPool* _writerPool;                                                    // (R)
-    StorageInterface* _storage;                                                 // (R)
-    ReplicationProcess* _replicationProcess;                                    // (S)
+    executor::TaskExecutor* _exec;                              // (R)
+    ThreadPool* _writerPool;                                    // (R)
+    StorageInterface* _storage;                                 // (R)
+    ReplicationProcess* _replicationProcess;                    // (S)
 
     // Handle to currently scheduled _startInitialSyncAttemptCallback() task.
     executor::TaskExecutor::CallbackHandle _startInitialSyncAttemptHandle;  // (M)
@@ -622,7 +625,7 @@ private:
     std::unique_ptr<Fetcher> _lastOplogEntryFetcher;      // (S)
     HostAndPort _syncSource;                              // (M)
     std::string _instanceId;
-    OpTime _lastFetched;                                  // (MX)
+    OpTime _lastFetched;  // (MX)
     // This is invoked with the final status of the initial sync. If startup() fails, this callback
     // is never invoked. The caller gets the last applied optime when the initial sync completes
     // successfully or an error status.
@@ -631,14 +634,13 @@ private:
     OnCompletionInitialSyncFn _onCompletion;  // (M)
 
     /* should not be used */
-    std::unique_ptr<Fetcher> _fCVFetcher;                 // (S)
-    std::unique_ptr<MultiApplier> _applier;               // (M)
-    OpTime _lastApplied;                                  // (MX)
-    std::unique_ptr<OplogBuffer> _oplogBuffer;            // (M)
-    std::unique_ptr<OplogApplier> _oplogApplier;          // (M)
-    
+    std::unique_ptr<Fetcher> _fCVFetcher;         // (S)
+    std::unique_ptr<MultiApplier> _applier;       // (M)
+    OpTime _lastApplied;                          // (MX)
+    std::unique_ptr<OplogBuffer> _oplogBuffer;    // (M)
+    std::unique_ptr<OplogApplier> _oplogApplier;  // (M)
 
-    
+
     // Used to signal changes in _state.
     mutable stdx::condition_variable _stateCondition;
 
@@ -657,12 +659,13 @@ private:
 
 class MultiSyncer {
     MONGO_DISALLOW_COPYING(MultiSyncer);
+
 public:
     typedef stdx::function<void(const OpTime& lastApplied)> OnCompletionFn;
 
     MultiSyncer(GlobalInitialSyncerOptions opts,
                 std::unique_ptr<DataReplicatorExternalState> dataReplicatorExternalState,
-                ReplicationCoordinator* replicationCoordinator, 
+                ReplicationCoordinator* replicationCoordinator,
                 ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
                 OnCompletionFn onCompletion);
 
@@ -695,7 +698,10 @@ public:
      */
     void join();
 
-    Status initialSyncCompleted(HostAndPort syncSource, std::string instanceId, StatusWith<OpTime> lastFetched);
+    Status initialSyncCompleted(HostAndPort syncSource,
+                                std::string instanceId,
+                                StatusWith<OpTime> lastFetched);
+
 private:
     Status _startSteadyReplication();
 

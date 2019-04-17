@@ -62,29 +62,11 @@
     }
     sleep(5000);
 
-    jsTestLog("Inserting in the shard1 docs Y");
-    for (let i = nDocs + 1; i <= nDocs + nDocs; ++i) {
-        assert.commandWorked(shard1coll.insert({_id: i, val: "Y_1_0"}));
-    }
-    sleep(5000);
-
     jsTestLog("Updating on the shard1 docs X");
     for (let i = 1; i <= nDocs; ++i) {
         assert.commandWorked(shard1coll.updateOne({_id: i}, {$set: {val: "X_1_1"}}));
     }
-    sleep(5000);
-
-    jsTestLog("Updating on the shard1 docs X");
-    for (let i = nDocs + 1; i <= nDocs + nDocs; ++i) {
-        assert.commandWorked(shard1coll.updateOne({_id: i}, {$set: {val: "Y_1_1"}}));
-    }
-    sleep(5000);
-
-    jsTestLog("Conflict: Updating on the shard0 docs Y");
-    for (let i = nDocs + 1; i <= nDocs + nDocs; ++i) {
-        assert.commandWorked(shard0coll.updateOne({_id: i}, {$set: {val: "Y_0_2"}}));
-    }
-    sleep(5000);
+    //sleep(1000);
 
     jsTestLog("Conflict: Updating on the shard0 docs X");
     for (let i = 1; i <= nDocs; ++i) {

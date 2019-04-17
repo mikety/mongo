@@ -27,10 +27,15 @@ public:
     static const OperationContext::Decoration<GlobalApplyTracker> get;
 
     GlobalApplyTracker() = default;
-    void setIsRemote(bool isRemote) { _isRemote = isRemote; }
-    bool isRemote() const { return _isRemote; }
- private:
-   bool _isRemote{false}; 
+    void setIsRemote(bool isRemote) {
+        _isRemote = isRemote;
+    }
+    bool isRemote() const {
+        return _isRemote;
+    }
+
+private:
+    bool _isRemote{false};
 };
 
-} // namespace mongo
+}  // namespace mongo

@@ -52,8 +52,8 @@
 #include "mongo/db/server_parameters.h"
 #include "mongo/executor/task_executor.h"
 #include "mongo/executor/thread_pool_task_executor.h"
-#include "mongo/rpc/metadata/repl_set_metadata.h"
 #include "mongo/rpc/get_status_from_command_result.h"
+#include "mongo/rpc/metadata/repl_set_metadata.h"
 #include "mongo/s/write_ops/batched_command_request.h"
 #include "mongo/s/write_ops/batched_command_response.h"
 #include "mongo/stdx/memory.h"
@@ -62,8 +62,8 @@
 #include "mongo/util/fail_point_service.h"
 #include "mongo/util/log.h"
 #include "mongo/util/mongoutils/str.h"
-#include "mongo/util/scopeguard.h"
 #include "mongo/util/net/socket_utils.h"
+#include "mongo/util/scopeguard.h"
 #include "mongo/util/time_support.h"
 #include "mongo/util/timer.h"
 
@@ -123,16 +123,20 @@ MONGO_EXPORT_SERVER_PARAMETER(numGlobalInitialSyncConnectAttempts, int, 10);
 MONGO_EXPORT_SERVER_PARAMETER(numGlobalInitialSyncOplogFindAttempts, int, 3);
 
 // The batchSize to use for the find/getMore queries called by the OplogFetcher
-MONGO_EXPORT_STARTUP_SERVER_PARAMETER(globalInitialSyncOplogFetcherBatchSize, int, defaultBatchSize);
+MONGO_EXPORT_STARTUP_SERVER_PARAMETER(globalInitialSyncOplogFetcherBatchSize,
+                                      int,
+                                      defaultBatchSize);
 
 // The number of initial sync attempts that have failed since server startup. Each instance of
-// GlobalInitialSyncer may run multiple attempts to fulfill an initial sync request that is triggered
+// GlobalInitialSyncer may run multiple attempts to fulfill an initial sync request that is
+// triggered
 // when GlobalInitialSyncer::startup() is called.
 Counter64 initialSyncFailedAttempts;
 
 // The number of initial sync requests that have been requested and failed. Each instance of
 // GlobalInitialSyncer (upon successful startup()) corresponds to a single initial sync request.
-// This value does not include the number of times where a GlobalInitialSyncer is created successfully
+// This value does not include the number of times where a GlobalInitialSyncer is created
+// successfully
 // but failed in startup().
 Counter64 initialSyncFailures;
 
@@ -197,32 +201,30 @@ std::string computeInstanceId(int syncSourcePort) {
     std::string hostName = getHostNameCached();
     return str::stream() << hostName << ":" << syncSourcePort;
 }
-    
+
 }  // namespace
 
 /* MultiSyncer */
 
 MultiSyncer::MultiSyncer(GlobalInitialSyncerOptions opts,
-             std::unique_ptr<DataReplicatorExternalState> dataReplicatorExternalState,
-             ReplicationCoordinator* replicationCoordinator,
-             ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
-             OnCompletionFn onCompletion):
-      _dataReplicatorExternalState(std::move(dataReplicatorExternalState)),
+                         std::unique_ptr<DataReplicatorExternalState> dataReplicatorExternalState,
+                         ReplicationCoordinator* replicationCoordinator,
+                         ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
+                         OnCompletionFn onCompletion)
+    : _dataReplicatorExternalState(std::move(dataReplicatorExternalState)),
       _replicationCoordinator(replicationCoordinator),
       _replicationCoordinatorExternalState(replicationCoordinatorExternalState),
-      _onCompletion(onCompletion)
-{
+      _onCompletion(onCompletion) {
     std::vector<int> ports;
     if (isMongodWithGlobalSync) {
         ports.push_back(mmPortConfig.load());
-    }
-    else if (isMongoG) {
+    } else if (isMongoG) {
         ports.push_back(mmPort1.load());
         ports.push_back(mmPort2.load());
         ports.push_back(mmPort3.load());
     }
 
-    for (const auto syncSourcePort: ports) {
+    for (const auto syncSourcePort : ports) {
         auto syncSource = HostAndPort("localhost", syncSourcePort);
         auto instanceId = computeInstanceId(syncSourcePort);
         GlobalInitialSyncerOptions options(opts);
@@ -232,8 +234,8 @@ MultiSyncer::MultiSyncer(GlobalInitialSyncerOptions opts,
             _dataReplicatorExternalState.get(),
             syncSource,
             instanceId,
-            [=] (StatusWith<OpTime> lastFetched){ 
-                return initialSyncCompleted(syncSource, instanceId, lastFetched); 
+            [=](StatusWith<OpTime> lastFetched) {
+                return initialSyncCompleted(syncSource, instanceId, lastFetched);
             });
         _initialSyncers.emplace_back(std::move(syncer));
         log() << "MultiMaster Computed CurrentSyncSource for MM Shard: " << syncSourcePort;
@@ -260,26 +262,33 @@ MultiSyncer::MultiSyncer(GlobalInitialSyncerOptions opts,
 }
 
 MultiSyncer::~MultiSyncer() {
-    log() << "MultiMaster ~MultiSyncer"; 
+    log() << "MultiMaster ~MultiSyncer";
 }
 
-Status MultiSyncer::initialSyncCompleted(HostAndPort syncSource, std::string instanceId, StatusWith<OpTime> lastFetched) {
+Status MultiSyncer::initialSyncCompleted(HostAndPort syncSource,
+                                         std::string instanceId,
+                                         StatusWith<OpTime> lastFetched) {
     log() << "MultiMaster Initial Syncer for: " << syncSource << " completed";
     _activeSyncCount--;
-    auto syncer = std::make_unique<GlobalSync>(_replicationCoordinator, _replicationCoordinatorExternalState, syncSource, instanceId, lastFetched.getValue());
+    auto syncer = std::make_unique<GlobalSync>(_replicationCoordinator,
+                                               _replicationCoordinatorExternalState,
+                                               syncSource,
+                                               instanceId,
+                                               lastFetched.getValue());
     _steadySyncers.emplace_back(std::move(syncer));
     auto res = Status::OK();
-    if (_initialSyncActive  && _activeSyncCount == 0) {
+    if (_initialSyncActive && _activeSyncCount == 0) {
         _initialSyncActive = false;
-       res = _startSteadyReplication();
+        res = _startSteadyReplication();
     }
     return res;
 }
 
 Status MultiSyncer::_startSteadyReplication() {
     auto res = Status::OK();
-    for (const auto& sync: _steadySyncers) {
-        log() << "MultiMaster starting steady state for syncer on instance: " << sync->getInstanceId();
+    for (const auto& sync : _steadySyncers) {
+        log() << "MultiMaster starting steady state for syncer on instance: "
+              << sync->getInstanceId();
         sync->startup();
     }
     return res;
@@ -287,8 +296,9 @@ Status MultiSyncer::_startSteadyReplication() {
 
 Status MultiSyncer::startup(std::uint32_t maxAttempts) noexcept {
     auto res = Status::OK();
-    for (const auto& sync: _initialSyncers) {
-        log() << "MultiMaster starting initial sync for syncer on instance: " << sync->getInstanceId();
+    for (const auto& sync : _initialSyncers) {
+        log() << "MultiMaster starting initial sync for syncer on instance: "
+              << sync->getInstanceId();
         res = sync->startup(maxAttempts);
         _activeSyncCount++;
     }
@@ -302,24 +312,24 @@ bool MultiSyncer::isActive() const {
 
 // TODO futures array will be perfect here
 void MultiSyncer::join() {
-    for (const auto& sync: _initialSyncers) {
+    for (const auto& sync : _initialSyncers) {
         log() << "MultiMaster joining initial sync on instance: " << sync->getInstanceId();
         sync->join();
     }
-    for (const auto& sync: _steadySyncers) {
+    for (const auto& sync : _steadySyncers) {
         log() << "MultiMaster joining steady sync on instance: " << sync->getInstanceId();
         sync->join();
     }
 }
 
 // TODO futures array will be perfect here
-Status  MultiSyncer::shutdown() {
+Status MultiSyncer::shutdown() {
     auto res = Status::OK();
-    for (const auto& sync: _initialSyncers) {
+    for (const auto& sync : _initialSyncers) {
         log() << "MultiMaster shutting down initial sync on instance: " << sync->getInstanceId();
         res = sync->shutdown();
     }
-    for (const auto& sync: _steadySyncers) {
+    for (const auto& sync : _steadySyncers) {
         log() << "MultiMaster shutting down steady sync on instance: " << sync->getInstanceId();
         sync->shutdown();
     }
@@ -327,12 +337,11 @@ Status  MultiSyncer::shutdown() {
 }
 
 /* GlobalInitialSyncer */
-GlobalInitialSyncer::GlobalInitialSyncer(
-    GlobalInitialSyncerOptions opts,
-    DataReplicatorExternalState* dataReplicatorExternalState,
-    HostAndPort syncSource,
-    const std::string& instanceId,
-    OnCompletionInitialSyncFn onCompletion)
+GlobalInitialSyncer::GlobalInitialSyncer(GlobalInitialSyncerOptions opts,
+                                         DataReplicatorExternalState* dataReplicatorExternalState,
+                                         HostAndPort syncSource,
+                                         const std::string& instanceId,
+                                         OnCompletionInitialSyncFn onCompletion)
     : _fetchCount(0),
       _opts(opts),
       _dataReplicatorExternalState(dataReplicatorExternalState),
@@ -341,7 +350,7 @@ GlobalInitialSyncer::GlobalInitialSyncer(
       _instanceId(instanceId),
       _onCompletion(onCompletion) {
     uassert(ErrorCodes::BadValue, "task executor cannot be null", _exec);
-    /* 
+    /*
     uassert(ErrorCodes::BadValue, "invalid storage interface", _storage);
     uassert(ErrorCodes::BadValue, "invalid replication process", _replicationProcess);
     uassert(ErrorCodes::BadValue, "invalid getMyLastOptime function", _opts.getMyLastOptime);
@@ -481,7 +490,7 @@ BSONObj GlobalInitialSyncer::getInitialSyncProgress() const {
     LockGuard lk(_mutex);
     log() << "MultiMaster getInitialSyncProgress";
     return BSON("ok" << 1);
-//    return _getInitialSyncProgress_inlock();
+    //    return _getInitialSyncProgress_inlock();
 }
 
 void GlobalInitialSyncer::_appendInitialSyncProgressMinimal_inlock(BSONObjBuilder* bob) const {
@@ -524,7 +533,8 @@ BSONObj GlobalInitialSyncer::_getInitialSyncProgress_inlock() const {
     return bob.obj();
 }
 
-void GlobalInitialSyncer::setScheduleDbWorkFn_forTest(const DatabaseCloner::ScheduleDbWorkFn& work) {
+void GlobalInitialSyncer::setScheduleDbWorkFn_forTest(
+    const DatabaseCloner::ScheduleDbWorkFn& work) {
     LockGuard lk(_mutex);
     _scheduleDbWorkFn = work;
 }
@@ -671,8 +681,8 @@ void GlobalInitialSyncer::_startInitialSyncAttemptCallback(
         _opts.remoteOplogNS,
         // config,
         _opts.oplogFetcherMaxFetcherRestarts,
-        0, // POC _rollbackChecker->getBaseRBID()
-        false, // requireFresherSyncSource
+        0,      // POC _rollbackChecker->getBaseRBID()
+        false,  // requireFresherSyncSource
         _dataReplicatorExternalState,
         [=](Fetcher::Documents::const_iterator first,
             Fetcher::Documents::const_iterator last,
@@ -689,7 +699,7 @@ void GlobalInitialSyncer::_startInitialSyncAttemptCallback(
     status = _startupComponent_inlock(_globalFetcher);
     if (!status.isOK()) {
         onCompletionGuard->setResultAndCancelRemainingWork_inlock(lock, status);
-//        _initialSyncState->dbsCloner.reset();
+        //        _initialSyncState->dbsCloner.reset();
         return;
     }
 }
@@ -731,7 +741,8 @@ void GlobalInitialSyncer::_chooseSyncSourceCallback(
         auto when = _exec->now() + _opts.syncSourceRetryWait;
         LOG(1) << "Error getting sync source: '" << syncSource.getStatus() << "', trying again in "
                << _opts.syncSourceRetryWait << " at " << when.toString() << ". Attempt "
-               << (chooseSyncSourceAttempt + 1) << " of " << numGlobalInitialSyncConnectAttempts.load();
+               << (chooseSyncSourceAttempt + 1) << " of " <<
+numGlobalInitialSyncConnectAttempts.load();
         auto status = _scheduleWorkAtAndSaveHandle_inlock(
             when,
             [=](const executor::TaskExecutor::CallbackArgs& args) {
@@ -1126,8 +1137,8 @@ void GlobalInitialSyncer::_fcvFetcherCallback(// const StatusWith<Fetcher::Query
 }
 */
 
-void GlobalInitialSyncer::_globalFetcherCallback(const Status& oplogFetcherFinishStatus,
-                                          std::shared_ptr<OnCompletionGuard> onCompletionGuard) {
+void GlobalInitialSyncer::_globalFetcherCallback(
+    const Status& oplogFetcherFinishStatus, std::shared_ptr<OnCompletionGuard> onCompletionGuard) {
     stdx::lock_guard<stdx::mutex> lock(_mutex);
     log() << "Finished fetching oplog during initial sync: " << redact(oplogFetcherFinishStatus)
           << ". Last fetched optime: " << _lastFetched.toString();
@@ -1498,12 +1509,12 @@ void GlobalInitialSyncer::_finishInitialSyncAttempt(const StatusWith<OpTime>& la
     log() << "Initial sync attempt finishing up.";
 
     stdx::lock_guard<stdx::mutex> lock(_mutex);
-  /*  log() << "Initial Sync Attempt Statistics: " << redact(_getInitialSyncProgress_inlock());
+    /*  log() << "Initial Sync Attempt Statistics: " << redact(_getInitialSyncProgress_inlock());
 
-    auto runTime = _initialSyncState ? _initialSyncState->timer.millis() : 0;
-    _stats.initialSyncAttemptInfos.emplace_back(
-        GlobalInitialSyncer::InitialSyncAttemptInfo{runTime, result.getStatus(), _syncSource});
-*/
+      auto runTime = _initialSyncState ? _initialSyncState->timer.millis() : 0;
+      _stats.initialSyncAttemptInfos.emplace_back(
+          GlobalInitialSyncer::InitialSyncAttemptInfo{runTime, result.getStatus(), _syncSource});
+  */
     if (result.isOK()) {
         // Scope guard will invoke _finishCallback().
         return;
@@ -1559,12 +1570,13 @@ void GlobalInitialSyncer::_finishCallback(StatusWith<OpTime> lastApplied) {
     // held by this function object.
     // '_onCompletion' must be moved to a temporary copy and destroyed outside the lock in case
     // there is any logic that's invoked at the function object's destruction that might call into
-    // this GlobalInitialSyncer. 'onCompletion' must be destroyed outside the lock and this should happen
+    // this GlobalInitialSyncer. 'onCompletion' must be destroyed outside the lock and this should
+    // happen
     // before we transition the state to Complete.
     decltype(_onCompletion) onCompletion;
     {
         stdx::lock_guard<stdx::mutex> lock(_mutex);
-        _tearDown_inlock( lastApplied);
+        _tearDown_inlock(lastApplied);
 
         invariant(_onCompletion);
         std::swap(_onCompletion, onCompletion);
@@ -1718,7 +1730,7 @@ Status GlobalInitialSyncer::_checkForShutdownAndConvertStatus_inlock(
 
 
 Status GlobalInitialSyncer::_checkForShutdownAndConvertStatus_inlock(const Status& status,
-                                                               const std::string& message) {
+                                                                     const std::string& message) {
 
     if (_isShuttingDown_inlock()) {
         return Status(ErrorCodes::CallbackCanceled, message + ": initial syncer is shutting down");
@@ -1823,8 +1835,8 @@ StatusWith<HostAndPort> GlobalInitialSyncer::_chooseSyncSource_inlock() {
 }
 
 Status GlobalInitialSyncer::_enqueueDocuments(Fetcher::Documents::const_iterator begin,
-                                        Fetcher::Documents::const_iterator end,
-                                        const GlobalFetcher::DocumentsInfo& info) {
+                                              Fetcher::Documents::const_iterator end,
+                                              const GlobalFetcher::DocumentsInfo& info) {
     if (info.toApplyDocumentCount == 0) {
         return Status::OK();
     }
@@ -1886,8 +1898,14 @@ Status GlobalInitialSyncer::_enqueueDocuments(Fetcher::Documents::const_iterator
         BSONObjBuilder applyOpsBuilder;
         BSONArrayBuilder opsArray(applyOpsBuilder.subarrayStart("applyOps"_sd));
         for (auto iDoc = begin; iDoc != end; ++iDoc) {
-            log() << "MultiMaster GlobalSync monogD _enqueueDocuments adding doc " << *iDoc;
-            opsArray.append(*iDoc);
+            auto noTsDoc = iDoc->removeField(OplogEntry::kTimestampFieldName);
+            BSONObjBuilder tBuilder;
+            tBuilder.appendElements(noTsDoc);
+            auto ts = LogicalClock::get(opCtx.get())->reserveTicks(1).asTimestamp();
+            tBuilder.append(OplogEntry::kTimestampFieldName, ts);
+            auto tDoc = tBuilder.done();
+            log() << "MultiMaster GlobalSync monogD _enqueueDocuments adding doc " << tDoc;
+            opsArray.append(tDoc);
         }
         opsArray.done();
         applyOpsBuilder.append("allowAtomic", false);
@@ -1898,15 +1916,16 @@ Status GlobalInitialSyncer::_enqueueDocuments(Fetcher::Documents::const_iterator
 
         log() << "MultiMaster GlobalSync mongoD _enqueueDocuments Running command: " << cmd;
         if (!client.runCommand(cmdNss.db().toString(), cmd, res)) {
-            log() << "MultiMaster GlobalSync mongoD _enqueueDocuments error running command: " << res;
+            log() << "MultiMaster GlobalSync mongoD _enqueueDocuments error running command: "
+                  << res;
             return getStatusFromCommandResult(res);
         }
         log() << "MultiMaster GlobalSync _enqueueDocuments Running command: OK";
     }
 
     _lastFetched = info.lastDocument;
-    log() << "MultiMaster GlobalSync batch resetting _lastFetched: " << _lastFetched << 
-        "MultiMaster GlobalSync _enqueueDocuments Finished OK";
+    log() << "MultiMaster GlobalSync batch resetting _lastFetched: " << _lastFetched
+          << "MultiMaster GlobalSync _enqueueDocuments Finished OK";
     /* POC use direct apply
     invariant(_oplogBuffer);
 

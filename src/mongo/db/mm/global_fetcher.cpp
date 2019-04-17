@@ -541,11 +541,8 @@ StatusWith<BSONObj> GlobalFetcher::_onSuccessfulBatch(const Fetcher::QueryRespon
         log() << "MultiMaster _onSuccessfulBatch 6 stop fetching ";
     }
 
-    return makeGetMoreCommandObject(queryResponse.nss,
-                                    queryResponse.cursorId,
-                                    lastFetched,
-                                    _getGetMoreMaxTime(),
-                                    _batchSize);
+    return makeGetMoreCommandObject(
+        queryResponse.nss, queryResponse.cursorId, lastFetched, _getGetMoreMaxTime(), _batchSize);
     /*
     if (_dataReplicatorExternalState->shouldStopFetching(
             _getSource(), replSetMetadata, oqMetadata)) {
