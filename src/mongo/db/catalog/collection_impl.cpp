@@ -513,6 +513,7 @@ Status CollectionImpl::insertDocuments(OperationContext* opCtx,
         auto newDoc = it->doc;
         std::string source = constructInstanceId();
         std::string origSource;
+        std::string uuid;
         auto localTs = LogicalClock::get(opCtx)->getClusterTime().asTimestamp();
         Timestamp remoteTs;
         if (useNewDocs) {
@@ -537,6 +538,9 @@ Status CollectionImpl::insertDocuments(OperationContext* opCtx,
                     if (currElem.hasField("_o")) {
                         origSource = currElem.getField("_o").String();
                     }
+                    if (currElem.hasField("_h")) {
+                        uuid = currElem.getField("_h").String();
+                    }
                     if (origSource != source && currElem.hasField("_t")) {
                         auto curTs = currElem.getField("_t").timestamp();
                         remoteTs = std::max(curTs, remoteTs);
@@ -544,10 +548,13 @@ Status CollectionImpl::insertDocuments(OperationContext* opCtx,
                     arrBuilder.append(currElem);
                 }
             }
+            BSONObjBuilder tBuilder;
             if (!isRemote) {
                 origSource = source;
+                uuid = UUID::gen().toString();
             }
-            BSONObjBuilder tBuilder;
+            
+            tBuilder.append("_h", uuid);
             tBuilder.append("_v", 0);
             tBuilder.append("_s", source);
             tBuilder.append("_o", origSource);
@@ -851,13 +858,10 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
         std::string source = constructInstanceId();
         std::string oSource = source;
         std::string sSource;
-        // auto newHistory = BSONArray(newDoc.getField("_history").Obj());
+        std::string uuid = UUID::gen().toString();
         auto newHistVec = newDoc.getField("_history").Array();
-        // auto oldHistory = BSONArray(oldDoc.value().getField("_history").Obj());
         auto oldHistVec = oldDoc.value().getField("_history").Array();
 
-        // BSONArrayIteratorSorted newHistIt(newHistory);
-        // BSONArrayIteratorSorted oldHistIt(oldHistory);
         BSONArrayBuilder histBuilder;
         int version(0);
         int curVersion(0);
@@ -865,11 +869,6 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
         Timestamp ts;
         // bypass common prefix in the new and the old history and find the latest change timestamp
 
-        /*
-        std::vector<BSONElement> oldHistVec;
-        auto oldHistVecIt = oldHistVec.begin();
-        auto newHistVecIt = newHistVec.begin();
-        */
         std::map<Timestamp, int> oldHistMap;
         std::map<Timestamp, int> newHistMap;
         // while (oldHistIt.more()) {
@@ -878,7 +877,6 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
         for (oldPos = 0; oldPos < oldHistVec.size(); ++oldPos) {
             //            auto oldHistElem = oldHistIt.next().Obj().getOwned();
             auto oldHistElem = oldHistVec.at(oldPos).Obj();
-
 
             if (oldHistElem.hasField("_o")) {
                 oSource = oldHistElem.getField("_o").String();
@@ -895,9 +893,7 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
                 ts = std::max(curTs, ts);
             }
 
-            //           if (newHistIt.more()) {
             if (newPos < newHistVec.size()) {
-                //                auto newHistElem = newHistIt.next().Obj().getOwned();
                 auto newHistElem = newHistVec.at(newPos).Obj();
                 if (newHistElem.hasField("_v")) {
                     version = std::max(version, newHistElem.getField("_v").Int());
@@ -919,12 +915,9 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
                 newHistMap[newHistElem.getField("_t").timestamp()] = newPos;
                 ++newPos;
             }
-            //        oldHistVecIt = oldHistVec.insert(oldHistVecIt, std::move(oldHistElem));
             oldHistMap[oldHistElem.getField("_t").timestamp()] = oldPos;
         }
-        //    while (newHistIt.more()) {
         while (newPos < newHistVec.size()) {
-            //        auto newHistElem = newHistIt.next().Obj().getOwned();
             auto newHistElem = newHistVec.at(newPos).Obj();
             if (newHistElem.hasField("_v")) {
                 version = std::max(version, newHistElem.getField("_v").Int());
@@ -960,6 +953,7 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
                           << newHistObj;
                 }
             }
+            uuid = newHistVec.at(newHistVec.size()-1).Obj().getField("_h").String();
         }
 
 
@@ -985,6 +979,7 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
 
         if (shouldAcceptUpdate) {
             BSONObjBuilder tBuilder;
+            tBuilder.append("_h", uuid);
             tBuilder.append("_v", version);
             tBuilder.append("_s", source);
             tBuilder.append("_o", oSource);
