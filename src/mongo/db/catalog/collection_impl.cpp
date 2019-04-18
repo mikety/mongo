@@ -53,6 +53,7 @@
 #include "mongo/db/catalog/namespace_uuid_cache.h"
 #include "mongo/db/catalog/uuid_catalog.h"
 #include "mongo/db/clientcursor.h"
+#include "mongo/db/dbdirectclient.h"
 #include "mongo/db/commands/server_status_metric.h"
 #include "mongo/db/concurrency/d_concurrency.h"
 #include "mongo/db/curop.h"
@@ -63,6 +64,7 @@
 #include "mongo/db/matcher/expression_parser.h"
 #include "mongo/db/mm/global_apply_tracker.h"
 #include "mongo/db/op_observer.h"
+#include "mongo/db/ops/write_ops.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/db/ops/update_request.h"
 #include "mongo/db/query/collation/collator_factory_interface.h"
@@ -78,6 +80,8 @@
 
 #include "mongo/db/auth/user_document_parser.h"  // XXX-ANDY
 #include "mongo/rpc/object_check.h"
+#include "mongo/s/write_ops/batched_command_request.h"
+#include "mongo/s/write_ops/batched_command_response.h"
 #include "mongo/util/fail_point_service.h"
 #include "mongo/util/log.h"
 
@@ -286,6 +290,72 @@ bool _isUpdateHasConflict(const std::string& source,
 
     */
     return false;
+}
+const std::string n1("greyparrot:20020");
+const std::string n2("greyparrot:20021");
+const std::string n3("greyparrot:20022");
+
+const bool nodeOrderPolicy = true;
+const bool timestampOrderPolicy = false;
+
+/**
+ * POC function with hardcoded nodes
+ * n3 < n2 < n1
+ */ 
+bool compareSource(std::string node1, std::string node2) {
+    invariant(node1==n1 || node1==n2 || node1==n3);
+    invariant(node2==n1 || node2==n2 || node2==n3);
+    if (node1 == node2) {
+        return false;
+    }
+
+    if (node1 == n3) {
+        return true;
+    }
+
+    if (node2 == n3) {
+        return false;
+    }
+
+    if (node1 == n1) {
+        return false;
+    }
+
+    if (node2 == n1) {
+        return true;
+    }
+
+    invariant(false); // never gonna get here
+    return false;
+}
+
+// TODO: make it return false for the equivalent timestamps
+bool tsIsLess(Timestamp ts1, Timestamp ts2) {
+    return ts1 < ts2;
+}
+
+bool histObjIsLess(BSONObj obj1, BSONObj obj2) {
+    if (obj1.getField("_v").Int() < obj2.getField("_v").Int()) {
+        return true;
+    }
+    
+    if (nodeOrderPolicy) {
+        return compareSource(obj1.getField("_s").String(), obj2.getField("_s").String());
+    }
+
+    // default
+    return tsIsLess(obj1.getField("_t").timestamp(), obj2.getField("_t").timestamp());
+}
+
+bool shouldAcceptUpdate(const std::vector<BSONElement>& histVec, const BSONObj& newObj) {
+    for (size_t i=0; i < histVec.size(); ++i) {
+        auto oldObj = histVec.at(i).Obj();
+        if (!histObjIsLess(oldObj, newObj)) {
+            return false;
+        }
+    }
+    log() << "MultiMaster shouldAcceptUpdate all old hist objects are less than the new obj: " << newObj;
+    return true;
 }
 
 }  // namespace
@@ -523,7 +593,8 @@ Status CollectionImpl::insertDocuments(OperationContext* opCtx,
             log() << "MultiMaster insertDocuments isRemote: " << isRemote;
             if (newDoc.hasElement("_history")) {
                 oBuilder.append(newDoc.getField("_id"));
-                oBuilder.append(newDoc.getField("val"));
+                oBuilder.append(newDoc.getField("X"));
+                oBuilder.append(newDoc.getField("Y"));
             } else {
                 oBuilder.appendElements(newDoc);
                 origSource = source;
@@ -847,6 +918,7 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
 
     StringData mmDbName = "mm_replication";
     StringData mmCollName = "MultiMasterCollection";
+    NamespaceString conflictsNss(mmDbName + "." + mmCollName + ".conflicts");
     BSONObj newVersionedDoc;
     bool isUpdated{false};
 
@@ -869,8 +941,8 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
         Timestamp ts;
         // bypass common prefix in the new and the old history and find the latest change timestamp
 
-        std::map<Timestamp, int> oldHistMap;
-        std::map<Timestamp, int> newHistMap;
+        std::map<std::string, int> oldHistMap;
+        std::map<std::string, int> newHistMap;
         // while (oldHistIt.more()) {
         decltype(oldHistVec)::size_type oldPos = 0;
         decltype(newHistVec)::size_type newPos = 0;
@@ -912,10 +984,14 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
                     log() << "MultiMaster  adding an element from old Hist: " << newHistElem;
                     histBuilder.append(oldHistElem.getOwned());
                 }
-                newHistMap[newHistElem.getField("_t").timestamp()] = newPos;
+                if (newHistElem.hasField("_h")) {
+                    newHistMap[newHistElem.getField("_h")] = newPos;
+                }
                 ++newPos;
             }
-            oldHistMap[oldHistElem.getField("_t").timestamp()] = oldPos;
+            if (oldHistElem.hasField("_h")) {
+                oldHistMap[oldHistElem.getField("_h")] = oldPos;
+            }
         }
         while (newPos < newHistVec.size()) {
             auto newHistElem = newHistVec.at(newPos).Obj();
@@ -933,15 +1009,19 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
                 ts = std::max(curTs, ts);
             }
             log() << "MultiMaster  adding an element from new Hist: " << newHistElem;
-            newHistMap[newHistElem.getField("_t").timestamp()] = newPos;
+            if (newHistElem.hasField("_h")) {
+                newHistMap[newHistElem.getField("_h")] = newPos;
+            }
             histBuilder.append(newHistElem.getOwned());
             ++newPos;
         }
 
-        bool hasConflict = false;  // isRemote ?_isUpdateHasConflict(source, localTs, oldHistory,
-                                   // newHistory) : false;
         // find a conflict look back to find if the proposed version was already set on this node
+        bool shouldUpdate{true};
         if (isRemote) {
+            bool hasConflict = false; // isRemote ?_isUpdateHasConflict(source, localTs, oldHistory,
+                                      // newHistory) : false;
+            BSONObj conflictNewObj;
             int tmpVer = version;
             for (newPos = 0; newPos < newHistVec.size(); ++newPos) {
                 auto newHistObj = newHistVec.at(newPos).Obj();
@@ -949,35 +1029,116 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
                     source != newHistObj.getField("_o").String() &&
                     newHistObj.getField("_o").String() == newHistObj.getField("_s").String()) {
                     hasConflict = true;
+                    conflictNewObj = newHistObj;
                     log() << "MultiMaster Conflict Detected for the history starting at: "
                           << newHistObj;
+                    
                 }
             }
             uuid = newHistVec.at(newHistVec.size()-1).Obj().getField("_h").String();
-        }
+            if (hasConflict) {
+                // add to the conflicts collectoin
+                log() << "MultiMaster update found conflict";
+                shouldUpdate = shouldAcceptUpdate(oldHistVec, conflictNewObj);
+                log() << "MultiMaster computed shouldUpdate: " << shouldUpdate;
 
+                // an attempt to make a conflict record
+                    DBDirectClient client(opCtx);
+                    std::vector<BSONObj> docs;
+                    std::vector<BSONObj> docs2; // POC hack to avoid invariant when inserting multidoc
 
-        bool shouldAcceptUpdate{true};
+                    if (shouldUpdate) {
+                        log() << "MultiMaster updateDocuments adding doc before update to conflicts " << oldDoc.value();
+                        docs.emplace_back([&] {
+                            BSONObjBuilder newDocBuilder;
+                            newDocBuilder.append("_gid", source);
+                            newDocBuilder.append("_status", "old_replaced");
+                            newDocBuilder.append("_conflictTs",
+                                          LogicalClock::get(opCtx)->getClusterTime().asTimestamp());
+                            newDocBuilder.appendElements(oldDoc.value());
+                            return newDocBuilder.obj();
+                        }());
+                        log() << "MultiMaster updateDocuments adding new doc conflicts " << newDoc;
+                        docs2.emplace_back([&] {
+                            BSONObjBuilder newDocBuilder;
+                            newDocBuilder.append("_gid", source);
+                            newDocBuilder.append("_status", "new");
+                            newDocBuilder.append("_conflictTs",
+                                          LogicalClock::get(opCtx)->getClusterTime().asTimestamp());
+                            newDocBuilder.appendElements(newDoc);
+                            return newDocBuilder.obj();
+                        }());
+                    }
+                    else {
+                        log() << "MultiMaster updateDocuments adding doc remaining in a conflict " << oldDoc.value();
+                        docs2.emplace_back([&] {
+                            BSONObjBuilder newDocBuilder;
+                            newDocBuilder.append("_gid", source);
+                            newDocBuilder.append("_status", "old");
+                            newDocBuilder.append("_conflictTs",
+                                          LogicalClock::get(opCtx)->getClusterTime().asTimestamp());
+                            newDocBuilder.appendElements(oldDoc.value());
+                            return newDocBuilder.obj();
+                        }());
+                        log() << "MultiMaster updateDocuments adding new doc ignored in conflict " << newDoc;
+                        docs.emplace_back([&] {
+                            BSONObjBuilder newDocBuilder;
+                            newDocBuilder.append("_gid", source);
+                            newDocBuilder.append("_status", "new_ignored");
+                            newDocBuilder.append("_conflictTs",
+                                          LogicalClock::get(opCtx)->getClusterTime().asTimestamp());
+                            newDocBuilder.appendElements(newDoc);
+                            return newDocBuilder.obj();
+                        }());
+                    }
 
-        if (hasConflict) {
-            // add to the conflicts collectoin
-            log() << "MultiMaster update found conflict";
+                    BatchedCommandRequest request([&] {
+                        write_ops::Insert insertOp(conflictsNss);
+                        insertOp.setDocuments(docs);
+                        return insertOp;
+                    }());
 
-            // shouldAcceptUpdate = _shouldAcceptUpdate();
-        }
+                    const BSONObj cmd = request.toBSON();
+                    BSONObj res;
 
-        if (sSource == source) {
-            if (shouldAcceptUpdate) {
-                version++;
-                oSource = source;
-                ts = localTs;
-            } else {  // Conflict with remote version
-                // Fail the local update
-                // uassert();
+                    log() << "MultiMaster updateDocuments conflict Running command: " << cmd;
+                    if (!client.runCommand(conflictsNss.db().toString(), cmd, res)) {
+                        log() << "MultiMaster updateDocuments conflict error running command: " << res;
+                    }
+                    else {
+                        log() << "MultiMaster updateDocuments conflict Running command: OK";
+                    }
+
+                    // POC hack to store more than 1 doc in the conflicts
+                    /*
+                    BatchedCommandRequest request2([&] {
+                        write_ops::Insert insertOp(conflictsNss);
+                        insertOp.setDocuments(docs2);
+                        return insertOp;
+                    }());
+
+                    const BSONObj cmd2 = request2.toBSON();
+                    BSONObj res2;
+
+                    log() << "MultiMaster updateDocuments conflict Running command: " << cmd2;
+                    if (!client.runCommand(conflictsNss.db().toString(), cmd2, res2)) {
+                        log() << "MultiMaster updateDocuments conflict error running command: " << res2;
+                    }
+                    else {
+                        log() << "MultiMaster updateDocuments conflict Running command: OK";
+                    }
+                    */
             }
         }
 
-        if (shouldAcceptUpdate) {
+        if (!isRemote && shouldUpdate) {
+            version++;
+            oSource = source;
+            ts = localTs;
+        }
+
+        if (shouldUpdate) {
+            isUpdated = true;
             BSONObjBuilder tBuilder;
             tBuilder.append("_h", uuid);
             tBuilder.append("_v", version);
@@ -991,26 +1152,28 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
             auto newHistoryArr = histBuilder.arr();
             BSONObjBuilder oBuilder;
             oBuilder.append(newDoc.getField("_id"));
-            oBuilder.append(newDoc.getField("val"));
+            oBuilder.append(newDoc.getField("X"));
+            oBuilder.append(newDoc.getField("Y"));
             oBuilder.append("_history", newHistoryArr);
             newVersionedDoc = oBuilder.done().getOwned();
             log() << "Multimaster: updated doc: " << newVersionedDoc;
-            isUpdated = true;
-            if (isUpdated) {  // POC hack to keep the history with updates so it gets to the global
-                              // oplog
-                auto update = args->update.getOwned();
-                BSONObjBuilder setBuilder;
-                setBuilder.appendElements(update.getField("$set").Obj());
-                setBuilder.append("_history", newHistoryArr);
-                auto newSet = setBuilder.done().getOwned();
-                // argsCopy.update = newSet;
-                log() << "args old update: " << argsCopy.update;
-                BSONObjBuilder updateBuilder;
-                updateBuilder.append(update.getField("$v"));
-                updateBuilder.append("$set", newSet);
-                argsCopy.update = updateBuilder.done().getOwned();
-                log() << "args new update: " << argsCopy.update;
-            }
+            auto update = args->update.getOwned();
+            BSONObjBuilder setBuilder;
+            setBuilder.appendElements(update.getField("$set").Obj());
+            setBuilder.append("_history", newHistoryArr);
+            auto newSet = setBuilder.done().getOwned();
+            // argsCopy.update = newSet;
+            log() << "args old update: " << argsCopy.update;
+            BSONObjBuilder updateBuilder;
+            updateBuilder.append(update.getField("$v"));
+            updateBuilder.append("$set", newSet);
+            argsCopy.update = updateBuilder.done().getOwned();
+            log() << "args new update: " << argsCopy.update;
+        }
+        else {
+            // skipping the update
+            log() << "MultiMaster skipping the update";
+            return {oldLocation};
         }
     }
 

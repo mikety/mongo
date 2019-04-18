@@ -58,19 +58,19 @@
     jsTestLog("Inserting in the shard0 docs X");
     const nDocs = 3;
     for (let i = 1; i <= nDocs; ++i) {
-        assert.commandWorked(shard0coll.insert({_id: i, val: "X_0_0"}));
+        assert.commandWorked(shard0coll.insert({_id: i, X: "X_0_0", Y: "Y_0_0"}));
     }
     sleep(5000);
 
     jsTestLog("Updating on the shard1 docs X");
     for (let i = 1; i <= nDocs; ++i) {
-        assert.commandWorked(shard1coll.updateOne({_id: i}, {$set: {val: "X_1_1"}}));
+        assert.commandWorked(shard1coll.updateOne({_id: i}, {$set: {Y: "Y_1_1"}}));
     }
     //sleep(1000);
 
     jsTestLog("Conflict: Updating on the shard0 docs X");
     for (let i = 1; i <= nDocs; ++i) {
-        assert.commandWorked(shard0coll.updateOne({_id: i}, {$set: {val: "X_0_2"}}));
+        assert.commandWorked(shard0coll.updateOne({_id: i}, {$set: {X: "X_0_2"}}));
     }
     sleep(5000);
 
@@ -83,17 +83,26 @@
     res = assert.commandWorked(st.shard0.getDB(dbName).runCommand({find: collName}));
     jsTestLog("Printing: Shard0  Data: " + tojson(res));
 
+    res = assert.commandWorked(st.shard0.getDB(dbName).runCommand({find: conflictsCollName}));
+    jsTestLog("Printing: Shard0  Conflicts: " + tojson(res));
+
     res = assert.commandWorked(st.rs1.getPrimary().getDB("local").runCommand({find: "oplog.rs"}));
     jsTestLog("Printing: Shard1  Oplog: " + tojson(res));
 
     res = assert.commandWorked(st.shard1.getDB(dbName).runCommand({find: collName}));
     jsTestLog("Printing: Shard1  Data: " + tojson(res));
 
+    res = assert.commandWorked(st.shard1.getDB(dbName).runCommand({find: conflictsCollName}));
+    jsTestLog("Printing: Shard1  Conflicts: " + tojson(res));
+
     res = assert.commandWorked(st.rs2.getPrimary().getDB("local").runCommand({find: "oplog.rs"}));
     jsTestLog("Printing: Shard2  Oplog: " + tojson(res));
 
     res = assert.commandWorked(st.shard2.getDB(dbName).runCommand({find: collName}));
     jsTestLog("Printing: Shard2  Data: " + tojson(res));
+
+    res = assert.commandWorked(st.shard2.getDB(dbName).runCommand({find: conflictsCollName}));
+    jsTestLog("Printing: Shard2  Conflicts: " + tojson(res));
 
     st.stop();
 })();

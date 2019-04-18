@@ -492,8 +492,10 @@ WriteResult performInserts(OperationContext* opCtx,
     // Insert performs its own retries, so we should only be within a WriteUnitOfWork when run in a
     // transaction.
     auto txnParticipant = TransactionParticipant::get(opCtx);
+    /* POC to enable conflicts write
     invariant(!opCtx->lockState()->inAWriteUnitOfWork() ||
               (txnParticipant && txnParticipant.inActiveOrKilledMultiDocumentTransaction()));
+    */
     auto& curOp = *CurOp::get(opCtx);
     ON_BLOCK_EXIT([&] {
         // This is the only part of finishCurOp we need to do for inserts because they reuse the
