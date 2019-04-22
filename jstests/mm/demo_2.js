@@ -58,25 +58,21 @@
     jsTestLog("Inserting in the shard0 docs X");
     const nDocs = 3;
     for (let i = 1; i <= nDocs; ++i) {
-        assert.commandWorked(shard0coll.insert({_id: i, X: "X_0_0", Y: "Y_0_0"}));
+        assert.commandWorked(shard0coll.insert({_id: i, X: "apple", Y: "orange"}));
     }
-    sleep(5000);
+    sleep(3000);
 
     jsTestLog("Updating on the shard1 docs X");
-    for (let i = 1; i < nDocs; ++i) {
-        assert.commandWorked(shard1coll.updateOne({_id: i}, {$set: {Y: "Y_1_1"}}));
+    for (let i = 1; i <= nDocs; ++i) {
+        assert.commandWorked(shard1coll.updateOne({_id: i}, {$set: {Y: "onion"}}));
     }
-    // special case
-    assert.commandWorked(shard1coll.updateOne({_id: nDocs}, {$set: {X: "X_0_0", Y: "Y_1_1"}}));
-    // sleep(1000);
+    //sleep(1000);
 
     jsTestLog("Conflict: Updating on the shard0 docs X");
-    for (let i = 1; i < nDocs; ++i) {
-        assert.commandWorked(shard0coll.updateOne({_id: i}, {$set: {X: "X_0_2"}}));
+    for (let i = 1; i <= nDocs; ++i) {
+        assert.commandWorked(shard0coll.updateOne({_id: i}, {$set: {X: "garlic"}}));
     }
-    // special case
-    assert.commandWorked(shard0coll.updateOne({_id: nDocs}, {$set: {X: "X_0_2", Y: "Y_0_0"}}));
-    sleep(5000);
+    sleep(3000);
 
     res = assert.commandWorked(globalDB.runCommand({find: "oplog_global"}));
     jsTestLog("Printing: Global Oplog: " + tojson(res));
@@ -108,5 +104,6 @@
     res = assert.commandWorked(st.shard2.getDB(dbName).runCommand({find: conflictsCollName}));
     jsTestLog("Printing: Shard2  Conflicts: " + tojson(res));
 
-    // st.stop();
+    sleep(1000000000);
+    //st.stop();
 })();

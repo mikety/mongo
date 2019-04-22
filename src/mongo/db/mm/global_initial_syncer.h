@@ -169,6 +169,8 @@ public:
                         DataReplicatorExternalState* dataReplicatorExternalState,
                         HostAndPort syncerSource,
                         const std::string& instanceId,
+                        bool isMongodWithGlobalSync,
+                        bool isMongoG,
                         OnCompletionInitialSyncFn onCompletion);
 
     virtual ~GlobalInitialSyncer();
@@ -625,6 +627,8 @@ private:
     std::unique_ptr<Fetcher> _lastOplogEntryFetcher;      // (S)
     HostAndPort _syncSource;                              // (M)
     std::string _instanceId;
+    bool _isMongodWithGlobalSync;
+    bool _isMongoG;
     OpTime _lastFetched;  // (MX)
     // This is invoked with the final status of the initial sync. If startup() fails, this callback
     // is never invoked. The caller gets the last applied optime when the initial sync completes

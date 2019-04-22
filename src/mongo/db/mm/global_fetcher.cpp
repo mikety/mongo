@@ -47,7 +47,6 @@
 #include "mongo/util/time_support.h"
 
 namespace mongo {
-extern const bool isMongodWithGlobalSync;
 
 namespace repl {
 
@@ -329,6 +328,8 @@ GlobalFetcher::GlobalFetcher(executor::TaskExecutor* executor,
                              EnqueueDocumentsFn enqueueDocumentsFn,
                              OnShutdownCallbackFn onShutdownCallbackFn,
                              const int batchSize,
+                             bool isMongodWithGlobalSync,
+                             bool isMongoG,
                              StartingPoint startingPoint)
     : AbstractOplogFetcher(executor,
                            lastFetched,
@@ -344,6 +345,8 @@ GlobalFetcher::GlobalFetcher(executor::TaskExecutor* executor,
       _enqueueDocumentsFn(enqueueDocumentsFn),
       _awaitDataTimeout(maximumAwaitDataTimeoutMS),
       _batchSize(batchSize),
+      _isMongodWithGlobalSync(isMongodWithGlobalSync),
+      _isMongoG(isMongoG),
       _startingPoint(startingPoint) {
 
     invariant(enqueueDocumentsFn);
@@ -362,7 +365,7 @@ BSONObj GlobalFetcher::_makeFindCommandObject(const NamespaceString& nss,
     // auto term = lastCommittedWithCurrentTerm.value;
     BSONObjBuilder cmdBob;
     StringData mmCollName = "mm_replication.MultiMasterCollection";
-    if (isMongodWithGlobalSync) {
+    if (_isMongodWithGlobalSync) {
         NamespaceString globalNss("local.oplog_global");
         auto instanceId = constructInstanceId();
 
@@ -477,7 +480,7 @@ StatusWith<BSONObj> GlobalFetcher::_onSuccessfulBatch(const Fetcher::QueryRespon
             _requireFresherSyncSource);
         if (!status.isOK()) {
             // Stop oplog fetcher and execute rollback if necessary.
-            if (!isMongodWithGlobalSync) {  // POC disabled filter to query after cluster time
+            if (!_isMongodWithGlobalSync) {  // POC disabled filter to query after cluster time
                 log() << "MultiMaster _onSuccessfulBatch 2 status: " << status;
                 return status;
             }

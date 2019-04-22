@@ -58,25 +58,48 @@
     jsTestLog("Inserting in the shard0 docs X");
     const nDocs = 3;
     for (let i = 1; i <= nDocs; ++i) {
-        assert.commandWorked(shard0coll.insert({_id: i, X: "X_0_0", Y: "Y_0_0"}));
+        assert.commandWorked(shard0coll.insert({_id: i, X: "apple", Y: "orange"}));
+    }
+    sleep(3000);
+
+    jsTestLog("Inserting in the shard1 docs Y");
+    for (let i = nDocs + 1; i <= nDocs + nDocs; ++i) {
+        assert.commandWorked(shard1coll.insert({_id: i, X: "cherry", Y: "banana"}));
+    }
+    sleep(3000);
+
+    /*
+    jsTestLog("Updating on the shard1 docs X");
+    for (let i = 1; i <= nDocs; ++i) {
+        assert.commandWorked(shard1coll.updateOne({_id: i}, {$set: {X: "X_1_1"}}));
     }
     sleep(5000);
+   */
 
     jsTestLog("Updating on the shard1 docs X");
-    for (let i = 1; i < nDocs; ++i) {
-        assert.commandWorked(shard1coll.updateOne({_id: i}, {$set: {Y: "Y_1_1"}}));
+    for (let i = 1; i <= nDocs; ++i) {
+        assert.commandWorked(shard1coll.updateOne({_id: i}, {$set: {X: "onion"}}));
     }
-    // special case
-    assert.commandWorked(shard1coll.updateOne({_id: nDocs}, {$set: {X: "X_0_0", Y: "Y_1_1"}}));
-    // sleep(1000);
+    sleep(3000);
 
+    jsTestLog("Conflict: Updating on the shard0 docs Y");
+    for (let i = nDocs + 1; i <= nDocs + nDocs; ++i) {
+        assert.commandWorked(shard0coll.updateOne({_id: i}, {$set: {Y: "garlic"}}));
+    }
+    sleep(3000);
+
+    assert.commandWorked(shard1coll.remove({_id: 1}));
+    sleep(3000);
+
+    assert.commandWorked(shard0coll.remove({_id: nDocs + 1}));
+    sleep(3000);
+    /*
     jsTestLog("Conflict: Updating on the shard0 docs X");
-    for (let i = 1; i < nDocs; ++i) {
+    for (let i = 1; i <= nDocs; ++i) {
         assert.commandWorked(shard0coll.updateOne({_id: i}, {$set: {X: "X_0_2"}}));
     }
-    // special case
-    assert.commandWorked(shard0coll.updateOne({_id: nDocs}, {$set: {X: "X_0_2", Y: "Y_0_0"}}));
     sleep(5000);
+   */
 
     res = assert.commandWorked(globalDB.runCommand({find: "oplog_global"}));
     jsTestLog("Printing: Global Oplog: " + tojson(res));
@@ -87,17 +110,11 @@
     res = assert.commandWorked(st.shard0.getDB(dbName).runCommand({find: collName}));
     jsTestLog("Printing: Shard0  Data: " + tojson(res));
 
-    res = assert.commandWorked(st.shard0.getDB(dbName).runCommand({find: conflictsCollName}));
-    jsTestLog("Printing: Shard0  Conflicts: " + tojson(res));
-
     res = assert.commandWorked(st.rs1.getPrimary().getDB("local").runCommand({find: "oplog.rs"}));
     jsTestLog("Printing: Shard1  Oplog: " + tojson(res));
 
     res = assert.commandWorked(st.shard1.getDB(dbName).runCommand({find: collName}));
     jsTestLog("Printing: Shard1  Data: " + tojson(res));
-
-    res = assert.commandWorked(st.shard1.getDB(dbName).runCommand({find: conflictsCollName}));
-    jsTestLog("Printing: Shard1  Conflicts: " + tojson(res));
 
     res = assert.commandWorked(st.rs2.getPrimary().getDB("local").runCommand({find: "oplog.rs"}));
     jsTestLog("Printing: Shard2  Oplog: " + tojson(res));
@@ -105,8 +122,6 @@
     res = assert.commandWorked(st.shard2.getDB(dbName).runCommand({find: collName}));
     jsTestLog("Printing: Shard2  Data: " + tojson(res));
 
-    res = assert.commandWorked(st.shard2.getDB(dbName).runCommand({find: conflictsCollName}));
-    jsTestLog("Printing: Shard2  Conflicts: " + tojson(res));
-
+    sleep(1000000000);
     // st.stop();
 })();

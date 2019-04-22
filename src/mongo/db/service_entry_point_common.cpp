@@ -1197,8 +1197,8 @@ DbResponse ServiceEntryPointCommon::handleRequest(OperationContext* opCtx,
         if (!opCtx->getLogicalSessionId() || !opCtx->getTxnNumber() ||
             repl::ReadConcernArgs::get(opCtx).getLevel() !=
                 repl::ReadConcernLevel::kSnapshotReadConcern) {
-           // POC  to enable conflicts write
-           // invariant(!opCtx->lockState()->inAWriteUnitOfWork());
+            // POC  to enable conflicts write
+            // invariant(!opCtx->lockState()->inAWriteUnitOfWork());
         }
     } else {
         LastError::get(c).startRequest();

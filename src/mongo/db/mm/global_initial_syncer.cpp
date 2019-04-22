@@ -68,13 +68,14 @@
 #include "mongo/util/timer.h"
 
 namespace mongo {
-extern const bool isMongodWithGlobalSync;
-extern const bool isMongoG;
 
 extern const std::atomic<int> mmPortConfig;
 extern const std::atomic<int> mmPort1;
 extern const std::atomic<int> mmPort2;
 extern const std::atomic<int> mmPort3;
+
+extern const std::atomic<bool> isMongoG;
+extern const std::atomic<bool> isMongodWithGlobalSync;
 
 namespace repl {
 
@@ -215,18 +216,11 @@ MultiSyncer::MultiSyncer(GlobalInitialSyncerOptions opts,
       _replicationCoordinator(replicationCoordinator),
       _replicationCoordinatorExternalState(replicationCoordinatorExternalState),
       _onCompletion(onCompletion) {
-    std::vector<int> ports;
-    if (isMongodWithGlobalSync) {
-        ports.push_back(mmPortConfig.load());
-    } else if (isMongoG) {
-        ports.push_back(mmPort1.load());
-        ports.push_back(mmPort2.load());
-        ports.push_back(mmPort3.load());
-    }
 
-    for (const auto syncSourcePort : ports) {
+    if (isMongodWithGlobalSync.load()) {
+        auto syncSourcePort = mmPortConfig.load();
         auto syncSource = HostAndPort("localhost", syncSourcePort);
-        auto instanceId = computeInstanceId(syncSourcePort);
+        auto instanceId = computeInstanceId(syncSourcePort);  // TODO: change to its own local port
         GlobalInitialSyncerOptions options(opts);
 
         auto syncer = stdx::make_unique<GlobalInitialSyncer>(
@@ -234,31 +228,41 @@ MultiSyncer::MultiSyncer(GlobalInitialSyncerOptions opts,
             _dataReplicatorExternalState.get(),
             syncSource,
             instanceId,
+            true,
+            false,
             [=](StatusWith<OpTime> lastFetched) {
                 return initialSyncCompleted(syncSource, instanceId, lastFetched);
             });
         _initialSyncers.emplace_back(std::move(syncer));
-        log() << "MultiMaster Computed CurrentSyncSource for MM Shard: " << syncSourcePort;
+        log() << "MultiMaster Computed CurrentSyncSource for local syncer global oplog: "
+              << syncSourcePort;
     }
-    /*
-    ++cur;
+    if (isMongoG.load()) {
+        std::vector<int> ports;
+        ports.push_back(mmPort1.load());
+        ports.push_back(mmPort2.load());
+        ports.push_back(mmPort3.load());
 
-    invariant(isMongoG);
+        for (const auto syncSourcePort : ports) {
+            auto syncSource = HostAndPort("localhost", syncSourcePort);
+            auto instanceId = computeInstanceId(syncSourcePort);
+            GlobalInitialSyncerOptions options(opts);
 
-    switch (cur % 3) {
-        case 0:
-            CurrentSyncSourcePort = mmPort1.load();
-            break;
-
-        case 1:
-            CurrentSyncSourcePort = mmPort2.load();
-            break;
-
-        case 2:
-            CurrentSyncSourcePort = mmPort3.load();
-            break;
+            auto syncer = stdx::make_unique<GlobalInitialSyncer>(
+                options,
+                _dataReplicatorExternalState.get(),
+                syncSource,
+                instanceId,
+                false,
+                true,
+                [=](StatusWith<OpTime> lastFetched) {
+                    return initialSyncCompleted(syncSource, instanceId, lastFetched);
+                });
+            _initialSyncers.emplace_back(std::move(syncer));
+            log() << "MultiMaster Computed CurrentSyncSource for MongoG for host: "
+                  << syncSourcePort;
+        }
     }
-    */
 }
 
 MultiSyncer::~MultiSyncer() {
@@ -341,6 +345,8 @@ GlobalInitialSyncer::GlobalInitialSyncer(GlobalInitialSyncerOptions opts,
                                          DataReplicatorExternalState* dataReplicatorExternalState,
                                          HostAndPort syncSource,
                                          const std::string& instanceId,
+                                         bool isMongodWithGlobalSync,
+                                         bool isMongoG,
                                          OnCompletionInitialSyncFn onCompletion)
     : _fetchCount(0),
       _opts(opts),
@@ -348,6 +354,8 @@ GlobalInitialSyncer::GlobalInitialSyncer(GlobalInitialSyncerOptions opts,
       _exec(_dataReplicatorExternalState->getTaskExecutor()),
       _syncSource(syncSource),
       _instanceId(instanceId),
+      _isMongodWithGlobalSync(isMongodWithGlobalSync),
+      _isMongoG(isMongoG),
       _onCompletion(onCompletion) {
     uassert(ErrorCodes::BadValue, "task executor cannot be null", _exec);
     /*
@@ -691,6 +699,8 @@ void GlobalInitialSyncer::_startInitialSyncAttemptCallback(
         },
         [=](const Status& s) { _globalFetcherCallback(s, onCompletionGuard); },
         globalInitialSyncOplogFetcherBatchSize,
+        _isMongodWithGlobalSync,
+        _isMongoG,
         GlobalFetcher::StartingPoint::kEnqueueFirstDoc);
 
     log() << "Starting GlobalFetcher: " << _globalFetcher->toString();
@@ -1862,7 +1872,7 @@ Status GlobalInitialSyncer::_enqueueDocuments(Fetcher::Documents::const_iterator
     // insert documents to the local.oplog_global
     DBDirectClient client(opCtx.get());
 
-    if (isMongoG) {
+    if (_isMongoG) {
         std::vector<BSONObj> docs;
 
         for (auto iDoc = begin; iDoc != end; ++iDoc) {
@@ -1877,7 +1887,6 @@ Status GlobalInitialSyncer::_enqueueDocuments(Fetcher::Documents::const_iterator
             }());
         }
 
-        invariant(!isMongodWithGlobalSync);
         BatchedCommandRequest request([&] {
             write_ops::Insert insertOp(nss);
             insertOp.setDocuments(docs);
@@ -1894,7 +1903,7 @@ Status GlobalInitialSyncer::_enqueueDocuments(Fetcher::Documents::const_iterator
         }
         log() << "MultiMaster GlobalSync _enqueueDocuments Running command: OK";
     } else {
-        invariant(isMongodWithGlobalSync);
+        invariant(_isMongodWithGlobalSync);
         BSONObjBuilder applyOpsBuilder;
         BSONArrayBuilder opsArray(applyOpsBuilder.subarrayStart("applyOps"_sd));
         for (auto iDoc = begin; iDoc != end; ++iDoc) {

@@ -96,7 +96,7 @@
 
 namespace mongo {
 extern const bool isMongodWithGlobalSync;
-extern const bool isMongoG;
+extern const std::atomic<bool> isMongoG;
 
 namespace repl {
 
@@ -786,7 +786,7 @@ void ReplicationCoordinatorImpl::_startDataReplication(OperationContext* opCtx,
 
 void ReplicationCoordinatorImpl::processReplSetStartGlobalSync(OperationContext* opCtx,
                                                                BSONObjBuilder* result) {
-    if (isMongoG || isMongodWithGlobalSync) {
+    if (isMongoG.load() || isMongodWithGlobalSync) {
         log() << "ReplicationCoordinatorImpl startGlobalSync";
         _startGlobalReplication(opCtx);
     }

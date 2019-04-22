@@ -75,8 +75,8 @@ namespace mongo {
 
 using std::string;
 
-MONGO_EXPORT_STARTUP_SERVER_PARAMETER(isMongodWithGlobalSync, bool, false);
-MONGO_EXPORT_STARTUP_SERVER_PARAMETER(isMongoG, bool, false);
+MONGO_EXPORT_SERVER_PARAMETER(isMongodWithGlobalSync, bool, false);
+MONGO_EXPORT_SERVER_PARAMETER(isMongoG, bool, false);
 
 MONGO_EXPORT_SERVER_PARAMETER(mmPortConfig, int, 20017);
 MONGO_EXPORT_SERVER_PARAMETER(mmPort1, int, 20017);
@@ -102,7 +102,7 @@ static int CurrentSyncSourcePort = 20017;
 void computeCurrentSyncSourcePort() {
     static int cur = -1;
 
-    if (isMongodWithGlobalSync) {
+    if (isMongodWithGlobalSync.load()) {
         CurrentSyncSourcePort = mmPortConfig.load();
         log() << "MultiMaster Computed CurrentSyncSource for MM Shard: " << CurrentSyncSourcePort;
         return;
@@ -110,7 +110,7 @@ void computeCurrentSyncSourcePort() {
 
     ++cur;
 
-    invariant(isMongoG);
+    invariant(isMongoG.load());
 
     switch (cur % 3) {
         case 0:
@@ -183,6 +183,8 @@ GlobalSync::GlobalSync(ReplicationCoordinator* replicationCoordinator,
 
 void GlobalSync::startup() {
     invariant(!_producerThread);
+    invariant(false);  // POC TODO for now fail it needs proper conversion to atmongod model and
+                       // messaging for discovery other nodes
     _producerThread.reset(new stdx::thread([this] { _run(); }));
 }
 
@@ -490,6 +492,8 @@ void GlobalSync::_produce() {
             },
             onOplogFetcherShutdownCallbackFn,
             defaultBatchSize,
+            false,  // TODO
+            false,  // TODO add isMongoG
             GlobalFetcher::StartingPoint::kSkipFirstDoc);
         /*
             isMongoG ? GlobalFetcher::StartingPoint::kEnqueueFirstDoc :
@@ -576,7 +580,7 @@ Status GlobalSync::_enqueueDocuments(Fetcher::Documents::const_iterator begin,
     // insert documents to the local.oplog_global
     DBDirectClient client(opCtx.get());
 
-    if (isMongoG) {
+    if (isMongoG.load()) {
         std::vector<BSONObj> docs;
 
         for (auto iDoc = begin; iDoc != end; ++iDoc) {
@@ -591,7 +595,6 @@ Status GlobalSync::_enqueueDocuments(Fetcher::Documents::const_iterator begin,
             }());
         }
 
-        invariant(!isMongodWithGlobalSync);
         BatchedCommandRequest request([&] {
             write_ops::Insert insertOp(nss);
             insertOp.setDocuments(docs);
@@ -608,7 +611,7 @@ Status GlobalSync::_enqueueDocuments(Fetcher::Documents::const_iterator begin,
         }
         log() << "MultiMaster _enqueueDocuments Running command: OK";
     } else {
-        invariant(isMongodWithGlobalSync);
+        invariant(isMongodWithGlobalSync.load());
         BSONObjBuilder applyOpsBuilder;
         BSONArrayBuilder opsArray(applyOpsBuilder.subarrayStart("applyOps"_sd));
         for (auto iDoc = begin; iDoc != end; ++iDoc) {

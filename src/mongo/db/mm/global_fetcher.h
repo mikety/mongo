@@ -130,6 +130,8 @@ public:
                   EnqueueDocumentsFn enqueueDocumentsFn,
                   OnShutdownCallbackFn onShutdownCallbackFn,
                   const int batchSize,
+                  bool isMongodWithGlobalSync,
+                  bool isMongoG,
                   StartingPoint startingPoint = StartingPoint::kSkipFirstDoc);
 
     virtual ~GlobalFetcher();
@@ -181,6 +183,8 @@ private:
     const EnqueueDocumentsFn _enqueueDocumentsFn;
     const Milliseconds _awaitDataTimeout;
     const int _batchSize;
+    bool _isMongodWithGlobalSync{false};
+    bool _isMongoG{false};
 
     // Indicates if we want to skip the first document during oplog fetching or not.
     StartingPoint _startingPoint;
