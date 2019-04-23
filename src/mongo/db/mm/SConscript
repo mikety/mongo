@@ -36,12 +36,38 @@ env.Library(
 )
 
 env.Library(
+    target='vector_time',
+    source=[
+        'vector_time.cpp',
+    ],
+    LIBDEPS=[
+        '$BUILD_DIR/mongo/base',
+        '$BUILD_DIR/mongo/db/service_context',
+    ],
+)
+
+env.Library(
+    target='vector_clock',
+    source=[
+        'vector_clock.cpp',
+    ],
+    LIBDEPS=[
+        'vector_time',
+        '$BUILD_DIR/mongo/db/global_settings',
+        '$BUILD_DIR/mongo/db/server_parameters',
+        '$BUILD_DIR/mongo/db/service_context',
+    ],
+)
+
+
+env.Library(
     target='global_initial_syncer',
     source=[
         'global_initial_syncer.cpp',
     ],
     LIBDEPS=[
         '$BUILD_DIR/mongo/client/fetcher',
+        '$BUILD_DIR/mongo/db/mm/vector_clock',
         '$BUILD_DIR/mongo/db/commands/server_status_core',
         '$BUILD_DIR/mongo/db/repl/collection_cloner',
         '$BUILD_DIR/mongo/db/repl/database_cloner',

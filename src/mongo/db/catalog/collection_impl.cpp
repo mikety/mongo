@@ -63,6 +63,7 @@
 #include "mongo/db/logical_clock.h"
 #include "mongo/db/matcher/expression_parser.h"
 #include "mongo/db/mm/global_apply_tracker.h"
+#include "mongo/db/mm/vector_clock.h"
 #include "mongo/db/op_observer.h"
 #include "mongo/db/operation_context.h"
 #include "mongo/db/ops/update_request.h"
@@ -114,6 +115,13 @@ MONGO_FAIL_POINT_DEFINE(hangAfterCollectionInserts);
 std::string constructInstanceId() {
     std::string hostName = getHostNameCached();
     return str::stream() << hostName << ":" << serverGlobalParams.port;
+}
+
+size_t computeNodeId() {
+    size_t nodeId = serverGlobalParams.port - 20020;
+    ;
+    invariant(nodeId >= 0 && nodeId < 3);
+    return nodeId;
 }
 
 /**
@@ -582,57 +590,81 @@ Status CollectionImpl::insertDocuments(OperationContext* opCtx,
         (isMongodWithGlobalSync && ns().coll() == mmCollName && ns().db() == mmDbName);
     for (auto it = begin; it != end; it++) {
         auto newDoc = it->doc;
-        std::string source = constructInstanceId();
-        std::string origSource;
-        std::string uuid;
-        auto localTs = LogicalClock::get(opCtx)->getClusterTime().asTimestamp();
         Timestamp remoteTs;
         if (useNewDocs) {
+            std::string source = constructInstanceId();
+            std::string origSource;
+            std::string uuid;
+            auto localTs = LogicalClock::get(opCtx)->getClusterTime().asTimestamp();
+            size_t nodeId = computeNodeId();
             BSONObjBuilder oBuilder;
             bool isRemote = GlobalApplyTracker::get(opCtx).isRemote();
             log() << "MultiMaster insertDocuments prepared newDoc before: " << newDoc;
             log() << "MultiMaster insertDocuments isRemote: " << isRemote;
-            if (newDoc.hasElement("_history")) {
+            if (isRemote) {
+                invariant(newDoc.hasElement("_globalTs"));
                 oBuilder.append(newDoc.getField("_id"));
                 oBuilder.append(newDoc.getField("X"));
                 oBuilder.append(newDoc.getField("Y"));
+                const auto timeElem(newDoc["_globalTs"]);
+                auto globalTs = VectorTime::fromBSON(timeElem);
+                uassertStatusOK(VectorClock::get(opCtx)->advanceGlobalTime(globalTs));
+                nodeId = newDoc.getField("_nodeId").Int();
+                // advance globalTime
+                // TODO better to do it at global oplog level
             } else {
+                //    VectorClock::get(opCtx)->reserveTicks(1);
+                VectorClock::get(opCtx)->syncClusterTime();
                 oBuilder.appendElements(newDoc);
-                origSource = source;
-            }
-            // Create the '' field object. Store there initial version, source, and clustertime.
-            BSONArrayBuilder arrBuilder;
-            if (newDoc.hasElement("_history")) {
-                auto newHistIt =
-                    BSONArrayIteratorSorted(BSONArray(newDoc.getField("_history").Obj()));
-                while (newHistIt.more()) {
-                    auto currElem = newHistIt.next().Obj();
-                    if (currElem.hasField("_o")) {
-                        origSource = currElem.getField("_o").String();
-                    }
-                    if (currElem.hasField("_h")) {
-                        uuid = currElem.getField("_h").String();
-                    }
-                    if (origSource != source && currElem.hasField("_t")) {
-                        auto curTs = currElem.getField("_t").timestamp();
-                        remoteTs = std::max(curTs, remoteTs);
-                    }
-                    arrBuilder.append(currElem);
-                }
-            }
-            BSONObjBuilder tBuilder;
-            if (!isRemote) {
-                origSource = source;
-                uuid = UUID::gen().toString();
             }
 
-            tBuilder.append("_h", uuid);
-            tBuilder.append("_v", 0);
-            tBuilder.append("_s", source);
-            tBuilder.append("_o", origSource);
-            tBuilder.append("_t", (!isRemote || remoteTs.isNull()) ? localTs : remoteTs);
-            arrBuilder.append(tBuilder.done().getOwned());
-            oBuilder.append("_history", BSONArray(arrBuilder.done().getOwned()));
+            const auto& globalTs = VectorClock::get(opCtx)->getGlobalTime();
+            globalTs.appendAsBSON(&oBuilder);
+            oBuilder.append("_nodeId", static_cast<int>(nodeId));
+
+            /*
+                if (newDoc.hasElement("_history")) {
+                    oBuilder.append(newDoc.getField("_id"));
+                    oBuilder.append(newDoc.getField("X"));
+                    oBuilder.append(newDoc.getField("Y"));
+                } else {
+                    oBuilder.appendElements(newDoc);
+                    origSource = source;
+                }
+                // Create the '' field object. Store there initial version, source, and clustertime.
+                BSONArrayBuilder arrBuilder;
+                if (newDoc.hasElement("_history")) {
+                    auto newHistIt =
+                        BSONArrayIteratorSorted(BSONArray(newDoc.getField("_history").Obj()));
+                    while (newHistIt.more()) {
+                        auto currElem = newHistIt.next().Obj();
+                        if (currElem.hasField("_o")) {
+                            origSource = currElem.getField("_o").String();
+                        }
+                        if (currElem.hasField("_h")) {
+                            uuid = currElem.getField("_h").String();
+                        }
+                        if (origSource != source && currElem.hasField("_t")) {
+                            auto curTs = currElem.getField("_t").timestamp();
+                            remoteTs = std::max(curTs, remoteTs);
+                        }
+                        arrBuilder.append(currElem);
+                    }
+                }
+                BSONObjBuilder tBuilder;
+                if (!isRemote) {
+                    origSource = source;
+                    uuid = UUID::gen().toString();
+                }
+
+                tBuilder.append("_h", uuid);
+                tBuilder.append("_v", 0);
+                tBuilder.append("_s", source);
+                tBuilder.append("_o", origSource);
+                tBuilder.append("_t", (!isRemote || remoteTs.isNull()) ? localTs : remoteTs);
+                arrBuilder.append(tBuilder.done().getOwned());
+                oBuilder.append("_history", BSONArray(arrBuilder.done().getOwned()));
+            */
             newDoc = oBuilder.done().getOwned();
             log() << "MultiMaster insertDocuments prepared newDoc after: " << newDoc;
         }
@@ -932,6 +964,7 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
         std::string oSource = source;
         std::string sSource;
         std::string uuid = UUID::gen().toString();
+        /*
         auto newHistVec = newDoc.getField("_history").Array();
         auto oldHistVec = oldDoc.value().getField("_history").Array();
 
@@ -1016,13 +1049,22 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
             histBuilder.append(newHistElem.getOwned());
             ++newPos;
         }
+        */
 
         // find a conflict look back to find if the proposed version was already set on this node
         bool shouldUpdate{true};
+        size_t nodeId = newDoc.getField("_nodeId").Int();
         if (isRemote) {
-            bool hasConflict =
-                false;  // isRemote ?_isUpdateHasConflict(source, localTs, oldHistory,
-                        // newHistory) : false;
+            bool hasConflict = false;
+            const auto timeElem(newDoc["_globalTs"]);
+            auto pastEvent = GlobalEvent(VectorTime::fromBSON(timeElem), nodeId);
+            auto newEvent = GlobalEvent(VectorClock::get(opCtx)->getGlobalTime(), computeNodeId());
+
+            hasConflict =
+                !pastEvent.happenedBefore(newEvent) && !newEvent.happenedBefore(pastEvent);
+
+            // uassertStatusOK( VectorClock::get(opCtx)->advanceGlobalTime(globalTs));
+            /*
             BSONObj conflictNewObj;
             int tmpVer = version;
             for (newPos = 0; newPos < newHistVec.size(); ++newPos) {
@@ -1037,10 +1079,11 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
                 }
             }
             uuid = newHistVec.at(newHistVec.size() - 1).Obj().getField("_h").String();
+            */
             if (hasConflict) {
                 // add to the conflicts collectoin
                 log() << "MultiMaster update found conflict";
-                shouldUpdate = shouldAcceptUpdate(oldHistVec, conflictNewObj);
+                // shouldUpdate = shouldAcceptUpdate(oldHistVec, conflictNewObj);
                 log() << "MultiMaster computed shouldUpdate: " << shouldUpdate;
 
                 // an attempt to make a conflict record
@@ -1137,14 +1180,46 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
             }
         }
 
+        const auto timeElem(newDoc["_globalTs"]);
+        auto globalTs = VectorTime::fromBSON(timeElem);
+        uassertStatusOK(VectorClock::get(opCtx)->advanceGlobalTime(globalTs));
+
         if (!isRemote && shouldUpdate) {
+            /*
             version++;
             oSource = source;
             ts = localTs;
+            */
+            VectorClock::get(opCtx)->syncClusterTime();
+            nodeId = computeNodeId();
         }
 
         if (shouldUpdate) {
             isUpdated = true;
+            BSONObjBuilder oBuilder;
+            oBuilder.append(newDoc.getField("_id"));
+            oBuilder.append(newDoc.getField("X"));
+            oBuilder.append(newDoc.getField("Y"));
+
+            const auto& globalTs = VectorClock::get(opCtx)->getGlobalTime();
+            oBuilder.append("_nodeId", static_cast<int>(nodeId));
+            globalTs.appendAsBSON(&oBuilder);
+            newVersionedDoc = oBuilder.done().getOwned();
+            log() << "Multimaster: updated doc: " << newVersionedDoc;
+            auto update = args->update.getOwned();
+            BSONObjBuilder setBuilder;
+            setBuilder.appendElements(update.getField("$set").Obj());
+            globalTs.appendAsBSON(&setBuilder);
+            setBuilder.append("_nodeId", static_cast<int>(nodeId));
+            auto newSet = setBuilder.done().getOwned();
+            // argsCopy.update = newSet;
+            log() << "args old update: " << argsCopy.update;
+            BSONObjBuilder updateBuilder;
+            updateBuilder.append(update.getField("$v"));
+            updateBuilder.append("$set", newSet);
+            argsCopy.update = updateBuilder.done().getOwned();
+            log() << "args new update: " << argsCopy.update;
+            /*
             BSONObjBuilder tBuilder;
             tBuilder.append("_h", uuid);
             tBuilder.append("_v", version);
@@ -1175,6 +1250,7 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
             updateBuilder.append("$set", newSet);
             argsCopy.update = updateBuilder.done().getOwned();
             log() << "args new update: " << argsCopy.update;
+            */
         } else {
             // skipping the update
             log() << "MultiMaster skipping the update";

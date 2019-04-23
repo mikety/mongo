@@ -66,7 +66,7 @@
     for (let i = 1; i <= nDocs; ++i) {
         assert.commandWorked(shard1coll.updateOne({_id: i}, {$set: {Y: "onion"}}));
     }
-    //sleep(1000);
+    // sleep(1000);
 
     jsTestLog("Conflict: Updating on the shard0 docs X");
     for (let i = 1; i <= nDocs; ++i) {
@@ -105,5 +105,5 @@
     jsTestLog("Printing: Shard2  Conflicts: " + tojson(res));
 
     sleep(1000000000);
-    //st.stop();
+    // st.stop();
 })();

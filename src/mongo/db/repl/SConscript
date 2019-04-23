@@ -839,6 +839,7 @@ env.Library(
         '$BUILD_DIR/mongo/rpc/metadata',
         '$BUILD_DIR/mongo/transport/transport_layer_common',
         '$BUILD_DIR/mongo/util/fail_point',
+        '$BUILD_DIR/mongo/db/mm/vector_clock',
         'collection_cloner',
         'initial_syncer',
         'data_replicator_external_state_initial_sync',

@@ -55,6 +55,7 @@
 #include "mongo/db/logical_time.h"
 #include "mongo/db/logical_time_validator.h"
 #include "mongo/db/mm/global_initial_syncer.h"
+#include "mongo/db/mm/vector_clock.h"
 #include "mongo/db/operation_context_noop.h"
 #include "mongo/db/repl/check_quorum_for_config_change.h"
 #include "mongo/db/repl/data_replicator_external_state_initial_sync.h"
@@ -826,7 +827,15 @@ void ReplicationCoordinatorImpl::_startGlobalReplication(OperationContext* opCtx
         //    _externalState->startSteadyStateGlobalSync(opCtxHolder.get(), this);
     };
 
-    log() << "_startGlobalReplication 1";
+
+    auto nodeId = serverGlobalParams.port - 20020;  // POC this is horrible hack that assumes that
+                                                    // ports start with 20020.
+    invariant(nodeId >= 0 && nodeId < 4);
+
+    log() << "_startGlobalReplication 1 vectorClock nodeId: " << nodeId;
+
+    auto vectorClock = stdx::make_unique<VectorClock>(opCtx->getServiceContext(), nodeId);
+    VectorClock::set(opCtx->getServiceContext(), std::move(vectorClock));
 
     // TODO: most likely no need to use copy to start up outside of the lock
     std::shared_ptr<MultiSyncer> multiSyncerCopy;
