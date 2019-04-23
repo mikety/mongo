@@ -63,6 +63,7 @@
 #include "mongo/db/logical_clock.h"
 #include "mongo/db/matcher/expression_parser.h"
 #include "mongo/db/mm/global_apply_tracker.h"
+#include "mongo/db/mm/policy.h"
 #include "mongo/db/mm/vector_clock.h"
 #include "mongo/db/op_observer.h"
 #include "mongo/db/operation_context.h"
@@ -1055,13 +1056,12 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
         bool shouldUpdate{true};
         size_t nodeId = newDoc.getField("_nodeId").Int();
         if (isRemote) {
-            bool hasConflict = false;
             const auto timeElem(newDoc["_globalTs"]);
             auto pastEvent = GlobalEvent(VectorTime::fromBSON(timeElem), nodeId);
-            auto newEvent = GlobalEvent(VectorClock::get(opCtx)->getGlobalTime(), computeNodeId());
+            auto curEvent = GlobalEvent(VectorClock::get(opCtx)->getGlobalTime(), computeNodeId());
 
-            hasConflict =
-                !pastEvent.happenedBefore(newEvent) && !newEvent.happenedBefore(pastEvent);
+            bool hasConflict = Policy::isConflict(pastEvent, curEvent);
+            shouldUpdate = Policy::shouldUpdate(pastEvent, curEvent);
 
             // uassertStatusOK( VectorClock::get(opCtx)->advanceGlobalTime(globalTs));
             /*
@@ -1081,6 +1081,8 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
             uuid = newHistVec.at(newHistVec.size() - 1).Obj().getField("_h").String();
             */
             if (hasConflict) {
+                log() << "MultiMaster: conflict detected. pastEvent: " << pastEvent
+                      << " newEvent: " << curEvent;
                 // add to the conflicts collectoin
                 log() << "MultiMaster update found conflict";
                 // shouldUpdate = shouldAcceptUpdate(oldHistVec, conflictNewObj);

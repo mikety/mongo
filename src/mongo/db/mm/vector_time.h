@@ -33,20 +33,21 @@ public:
 
     VectorTime();
 
-    std::string toString() const; 
+    std::string toString() const;
 
     void addTicksToNode(size_t nodeId, uint32_t nTicks);
     void setTimeForNode(size_t nodeId, LogicalTime lTime);
-    
+
     void advance(const VectorTime& newTime);
 
     LogicalTime timeAtNode(size_t nodeId) const {
         return _time[nodeId];
     }
-    
+
     static VectorTime fromBSON(BSONElement bson);
 
     void appendAsBSON(BSONObjBuilder* builder) const;
+
 private:
     // position based vector time
     std::vector<LogicalTime> _time;
@@ -60,9 +61,15 @@ public:
     GlobalEvent(VectorTime time, size_t nodeId);
 
     // the argument has happened before the caller on the argument's node.
-    virtual bool happenedBefore(const GlobalEvent& r) const;
+    virtual bool hb(const GlobalEvent& r) const;
 
     virtual ~GlobalEvent() {}
+
+    size_t nodeId() const {
+        return _nodeId;
+    }
+
+    std::string toString() const;
 
 private:
     VectorTime _globalTime;
@@ -73,4 +80,8 @@ inline std::ostream& operator<<(std::ostream& s, const VectorTime& v) {
     return (s << v.toString());
 }
 
-} // namespace mongo
+inline std::ostream& operator<<(std::ostream& s, const GlobalEvent& v) {
+    return (s << v.toString());
+}
+
+}  // namespace mongo

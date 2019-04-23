@@ -17,8 +17,8 @@
 
 #include "mongo/platform/basic.h"
 
-#include "mongo/db/mm/vector_time.h"
 #include "mongo/db/logical_time.h"
+#include "mongo/db/mm/vector_time.h"
 
 #include "mongo/bson/bsonobj.h"
 #include "mongo/bson/bsonobjbuilder.h"
@@ -30,27 +30,25 @@ constexpr auto kOperationTime = "operationTime"_sd;
 
 }  // namespace
 
-VectorTime::VectorTime():  _time(NodeVectorSize)
-{
-}
+VectorTime::VectorTime() : _time(NodeVectorSize) {}
 
 void VectorTime::addTicksToNode(size_t nodeId, uint32_t nTicks) {
     invariant(nodeId <= NodeVectorSize);
-    
+
     _time[nodeId].addTicks(nTicks);
 }
 
 void VectorTime::setTimeForNode(size_t nodeId, LogicalTime lTime) {
     invariant(nodeId <= NodeVectorSize);
-    
+
     _time[nodeId] = lTime;
 }
 
 void VectorTime::advance(const VectorTime& newTime) {
-    for (size_t i=0; i<NodeVectorSize; ++i) {
+    for (size_t i = 0; i < NodeVectorSize; ++i) {
         if (_time[i] < newTime._time[i]) {
             _time[i] = newTime._time[i];
-        } 
+        }
     }
 }
 
@@ -66,9 +64,9 @@ VectorTime VectorTime::fromBSON(BSONElement bson) {
 }
 
 void VectorTime::appendAsBSON(BSONObjBuilder* builder) const {
-    
+
     BSONArrayBuilder arrBuilder;
-    for (size_t i=0; i<NodeVectorSize; ++i) {
+    for (size_t i = 0; i < NodeVectorSize; ++i) {
         arrBuilder.append(_time[i].asTimestamp());
     }
     builder->append("_globalTs", arrBuilder.arr());
@@ -76,7 +74,7 @@ void VectorTime::appendAsBSON(BSONObjBuilder* builder) const {
 
 std::string VectorTime::toString() const {
     std::string res = "[";
-    for (size_t i=0; i<NodeVectorSize; ++i) {
+    for (size_t i = 0; i < NodeVectorSize; ++i) {
         res += _time[i].toString();
         res += " ";
     }
@@ -85,12 +83,16 @@ std::string VectorTime::toString() const {
 }
 // GlobalEvent
 
-GlobalEvent::GlobalEvent(VectorTime time, size_t nodeId): _globalTime(time), _nodeId(nodeId)
-{}
+GlobalEvent::GlobalEvent(VectorTime time, size_t nodeId) : _globalTime(time), _nodeId(nodeId) {}
 
-bool GlobalEvent::happenedBefore(const GlobalEvent& r) const
-{
+bool GlobalEvent::hb(const GlobalEvent& r) const {
     return r._globalTime.timeAtNode(r._nodeId) < _globalTime.timeAtNode(r._nodeId);
 }
 
-} // namespace mongo
+std::string GlobalEvent::toString() const {
+    std::ostringstream res;
+    res << "Node: " << _nodeId << " Event Time: " << _globalTime.toString();
+    return res.str();
+}
+
+}  // namespace mongo

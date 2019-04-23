@@ -44,6 +44,7 @@ public:
     void setGlobalTime(VectorTime newTime);
 
     void syncClusterTime();
+
 private:
     mutable stdx::mutex _mutex;
 
@@ -54,4 +55,4 @@ private:
     VectorTime _globalTime;
 };
 
-} // namespace mongo
+}  // namespace mongo

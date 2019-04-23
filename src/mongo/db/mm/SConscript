@@ -47,18 +47,29 @@ env.Library(
 )
 
 env.Library(
+    target='policy',
+    source=[
+        'policy.cpp',
+    ],
+    LIBDEPS=[
+        'vector_time',
+        '$BUILD_DIR/mongo/base',
+    ],
+)
+
+env.Library(
     target='vector_clock',
     source=[
         'vector_clock.cpp',
     ],
     LIBDEPS=[
         'vector_time',
+        'policy',
         '$BUILD_DIR/mongo/db/global_settings',
         '$BUILD_DIR/mongo/db/server_parameters',
         '$BUILD_DIR/mongo/db/service_context',
     ],
 )
-
 
 env.Library(
     target='global_initial_syncer',

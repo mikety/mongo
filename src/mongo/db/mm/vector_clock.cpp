@@ -31,9 +31,8 @@ void VectorClock::set(ServiceContext* service, std::unique_ptr<VectorClock> cloc
     clock = std::move(clockArg);
 }
 
-VectorClock::VectorClock( ServiceContext* service, size_t nodeId ) : 
-    _service(service), _nodeId(nodeId) 
-{}
+VectorClock::VectorClock(ServiceContext* service, size_t nodeId)
+    : _service(service), _nodeId(nodeId) {}
 
 VectorTime VectorClock::getGlobalTime() {
     stdx::lock_guard<stdx::mutex> lock(_mutex);
@@ -62,4 +61,4 @@ void VectorClock::syncClusterTime() {
     _globalTime.setTimeForNode(_nodeId, LogicalClock::get(_service)->getClusterTime());
 }
 
-} // namespace mongo
+}  // namespace mongo
