@@ -79,6 +79,8 @@ public:
     static const BSONField<BSONObj> keyPattern;
     static const BSONField<BSONObj> defaultCollation;
     static const BSONField<bool> unique;
+    static const BSONField<bool> sharded;
+    static const BSONField<bool> global;
     static const BSONField<UUID> uuid;
 
     /**
@@ -147,6 +149,20 @@ public:
         _unique = unique;
     }
 
+    bool getSharded() const {
+        return _sharded.get_value_or(false);
+    }
+    void setSharded(bool sharded) {
+        _sharded = sharded;
+    }
+
+    bool getGlobal() const {
+        return _global.get_value_or(false);
+    }
+    void setGlobal(bool global) {
+        _global = global;
+    }
+
     boost::optional<UUID> getUUID() const {
         return _uuid;
     }
@@ -190,6 +206,8 @@ private:
 
     // Optional uniqueness of the sharding key. If missing, implies false.
     boost::optional<bool> _unique;
+    boost::optional<bool> _sharded;
+    boost::optional<bool> _global;
 
     // Optional in 3.6 binaries, because UUID does not exist in featureCompatibilityVersion=3.4.
     boost::optional<UUID> _uuid;

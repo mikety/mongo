@@ -55,6 +55,8 @@ const BSONField<Date_t> CollectionType::updatedAt("lastmod");
 const BSONField<BSONObj> CollectionType::keyPattern("key");
 const BSONField<BSONObj> CollectionType::defaultCollation("defaultCollation");
 const BSONField<bool> CollectionType::unique("unique");
+const BSONField<bool> CollectionType::sharded("partitioned");
+const BSONField<bool> CollectionType::global("global");
 const BSONField<UUID> CollectionType::uuid("uuid");
 
 StatusWith<CollectionType> CollectionType::fromBSON(const BSONObj& source) {
@@ -146,6 +148,30 @@ StatusWith<CollectionType> CollectionType::fromBSON(const BSONObj& source) {
             coll._unique = collUnique;
         } else if (status == ErrorCodes::NoSuchKey) {
             // Key uniqueness can be missing in which case it is presumed false
+        } else {
+            return status;
+        }
+    }
+
+    {
+        bool collSharded;
+        Status status = bsonExtractBooleanField(source, sharded.name(), &collSharded);
+        if (status.isOK()) {
+            coll._sharded = collSharded;
+        } else if (status == ErrorCodes::NoSuchKey) {
+            // Sharded can be missing in which case it is presumed true
+        } else {
+            return status;
+        }
+    }
+
+    {
+        bool collGlobal;
+        Status status = bsonExtractBooleanField(source, global.name(), &collGlobal);
+        if (status.isOK()) {
+            coll._global = collGlobal;
+        } else if (status == ErrorCodes::NoSuchKey) {
+            //Global can  be missing in which case it is presumed false
         } else {
             return status;
         }
@@ -255,6 +281,14 @@ BSONObj CollectionType::toBSON() const {
 
     if (_unique.is_initialized()) {
         builder.append(unique.name(), _unique.get());
+    }
+
+    if (_sharded.is_initialized()) {
+        builder.append(sharded.name(), _sharded.get());
+    }
+
+    if (_global.is_initialized()) {
+        builder.append(global.name(), _global.get());
     }
 
     if (_uuid.is_initialized()) {
