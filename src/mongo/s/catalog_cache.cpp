@@ -101,6 +101,8 @@ std::shared_ptr<RoutingTableHistory> refreshCollectionRoutingInfo(
                                             KeyPattern(collectionAndChunks.shardKeyPattern),
                                             std::move(defaultCollator),
                                             collectionAndChunks.shardKeyIsUnique,
+                                            collectionAndChunks.isSharded,
+                                            collectionAndChunks.isGlobal,
                                             collectionAndChunks.epoch,
                                             collectionAndChunks.changedChunks);
     }();

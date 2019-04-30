@@ -19,16 +19,16 @@
     let globalPrimary = st.rs0.getPrimary();
     let globalPort = globalPrimary.port;
 
-    assert.commandWorked(globalPrimary.getDB("admin").runCommand(
-        {setParameter: 1, isMongoG: true}));
+    assert.commandWorked(
+        globalPrimary.getDB("admin").runCommand({setParameter: 1, isMongoG: true}));
 
-    assert.commandWorked(st.rs0.getPrimary().getDB("admin").runCommand(
-        {setParameter: 1, mmPortConfig: globalPort}));
-    assert.commandWorked(st.rs1.getPrimary().getDB("admin").runCommand(
-        {setParameter: 1, mmPortConfig: globalPort}));
-    assert.commandWorked(st.rs2.getPrimary().getDB("admin").runCommand(
-        {setParameter: 1, mmPortConfig: globalPort}));
-        
+    assert.commandWorked(
+        st.rs0.getPrimary().getDB("admin").runCommand({setParameter: 1, mmPortConfig: globalPort}));
+    assert.commandWorked(
+        st.rs1.getPrimary().getDB("admin").runCommand({setParameter: 1, mmPortConfig: globalPort}));
+    assert.commandWorked(
+        st.rs2.getPrimary().getDB("admin").runCommand({setParameter: 1, mmPortConfig: globalPort}));
+
     assert.commandWorked(globalPrimary.getDB("admin").runCommand(
         {setParameter: 1, mmPort1: st.rs0.getPrimary().port}));
     assert.commandWorked(globalPrimary.getDB("admin").runCommand(

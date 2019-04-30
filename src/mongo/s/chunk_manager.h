@@ -81,6 +81,8 @@ public:
         KeyPattern shardKeyPattern,
         std::unique_ptr<CollatorInterface> defaultCollator,
         bool unique,
+        bool isSharded,
+        bool isGlobal,
         OID epoch,
         const std::vector<ChunkType>& chunks);
 
@@ -114,6 +116,14 @@ public:
 
     bool isUnique() const {
         return _unique;
+    }
+
+    bool isSharded() const {
+        return _isSharded;
+    }
+
+    bool isGlobal() const {
+        return _isGlobal;
     }
 
     ChunkVersion getVersion() const {
@@ -156,6 +166,8 @@ private:
                         KeyPattern shardKeyPattern,
                         std::unique_ptr<CollatorInterface> defaultCollator,
                         bool unique,
+                        bool isSharded,
+                        bool isGlobal,
                         ChunkInfoMap chunkMap,
                         ChunkVersion collectionVersion);
 
@@ -186,6 +198,8 @@ private:
 
     // Whether the sharding key is unique
     const bool _unique;
+    const bool _isSharded;
+    const bool _isGlobal;
 
     // Map from the max for each chunk to an entry describing the chunk. The union of all chunks'
     // ranges must cover the complete space from [MinKey, MaxKey).

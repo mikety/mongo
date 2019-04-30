@@ -171,7 +171,7 @@ StatusWith<CollectionType> CollectionType::fromBSON(const BSONObj& source) {
         if (status.isOK()) {
             coll._global = collGlobal;
         } else if (status == ErrorCodes::NoSuchKey) {
-            //Global can  be missing in which case it is presumed false
+            // Global can  be missing in which case it is presumed false
         } else {
             return status;
         }

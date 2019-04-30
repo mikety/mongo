@@ -75,6 +75,8 @@ RoutingTableHistory::RoutingTableHistory(NamespaceString nss,
                                          KeyPattern shardKeyPattern,
                                          std::unique_ptr<CollatorInterface> defaultCollator,
                                          bool unique,
+                                         bool isSharded,
+                                         bool isGlobal,
                                          ChunkInfoMap chunkMap,
                                          ChunkVersion collectionVersion)
     : _sequenceNumber(nextCMSequenceNumber.addAndFetch(1)),
@@ -84,6 +86,8 @@ RoutingTableHistory::RoutingTableHistory(NamespaceString nss,
       _shardKeyOrdering(Ordering::make(_shardKeyPattern.toBSON())),
       _defaultCollator(std::move(defaultCollator)),
       _unique(unique),
+      _isSharded(isSharded),
+      _isGlobal(isGlobal),
       _chunkMap(std::move(chunkMap)),
       _collectionVersion(collectionVersion),
       _shardVersions(_constructShardVersionMap()) {}
@@ -497,6 +501,8 @@ std::shared_ptr<RoutingTableHistory> RoutingTableHistory::makeNew(
     KeyPattern shardKeyPattern,
     std::unique_ptr<CollatorInterface> defaultCollator,
     bool unique,
+    bool isSharded,
+    bool isGlobal,
     OID epoch,
     const std::vector<ChunkType>& chunks) {
     return RoutingTableHistory(std::move(nss),
@@ -504,6 +510,8 @@ std::shared_ptr<RoutingTableHistory> RoutingTableHistory::makeNew(
                                std::move(shardKeyPattern),
                                std::move(defaultCollator),
                                std::move(unique),
+                               std::move(isSharded),
+                               std::move(isGlobal),
                                {},
                                {0, 0, epoch})
         .makeUpdated(chunks);
@@ -586,6 +594,8 @@ std::shared_ptr<RoutingTableHistory> RoutingTableHistory::makeUpdated(
                                 KeyPattern(getShardKeyPattern().getKeyPattern()),
                                 CollatorInterface::cloneCollator(getDefaultCollator()),
                                 isUnique(),
+                                isSharded(),
+                                isGlobal(),
                                 std::move(chunkMap),
                                 collectionVersion));
 }

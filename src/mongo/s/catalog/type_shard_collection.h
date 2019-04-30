@@ -77,6 +77,8 @@ public:
     static const BSONField<BSONObj> keyPattern;
     static const BSONField<BSONObj> defaultCollation;
     static const BSONField<bool> unique;
+    static const BSONField<bool> sharded;
+    static const BSONField<bool> global;
     static const BSONField<bool> refreshing;
     static const BSONField<Date_t> lastRefreshedCollectionVersion;
     static const BSONField<int> enterCriticalSectionCounter;
@@ -86,7 +88,9 @@ public:
                         OID epoch,
                         const KeyPattern& keyPattern,
                         const BSONObj& defaultCollation,
-                        bool unique);
+                        bool unique,
+                        bool sharded,
+                        bool global);
 
     /**
      * Constructs a new ShardCollectionType object from BSON. Also does validation of the contents.
@@ -136,7 +140,19 @@ public:
     void setUnique(bool unique) {
         _unique = unique;
     }
+    bool getSharded() const {
+        return _sharded;
+    }
+    void setSharded(bool sharded) {
+        _sharded = sharded;
+    }
 
+    bool getGlobal() const {
+        return _global;
+    }
+    void setGlobal(bool global) {
+        _global = global;
+    }
     bool hasRefreshing() const {
         return _refreshing.is_initialized();
     }
@@ -171,6 +187,8 @@ private:
 
     // Uniqueness of the sharding key.
     bool _unique;
+    bool _sharded;
+    bool _global;
 
     // Refresh fields set by primaries and used by shard secondaries to safely refresh chunk
     // metadata. '_refreshing' indicates whether the chunks collection is currently being updated,

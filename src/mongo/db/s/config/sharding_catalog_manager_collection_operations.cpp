@@ -541,6 +541,35 @@ void ShardingCatalogManager::createCollection(OperationContext* opCtx,
 
     checkCollectionOptions(opCtx, primaryShard.get(), ns, collOptions);
 
+    // Insert chunk document into catalog
+    ChunkVersion version(1, 0, OID::gen());
+    const Timestamp& validAfter = LogicalClock::get(opCtx)->getClusterTime().asTimestamp();
+    InitialSplitPolicy::ShardCollectionConfig shardConfig;
+    KeyPattern keyPattern(BSON("_id" << 1));
+    shardConfig.chunks.emplace_back(
+        ns, ChunkRange(keyPattern.globalMin(), keyPattern.globalMax()), version, primaryShardId);
+
+    auto& chunk = shardConfig.chunks.back();
+    chunk.setHistory({ChunkHistory(validAfter, primaryShardId)});
+
+    InitialSplitPolicy::writeFirstChunksToConfig(opCtx, shardConfig);
+
+    // Insert collection document into catalog
+    {
+        CollectionType coll;
+        coll.setNs(ns);
+        /* TODO set collation */
+        /* TODO set UUID */
+        coll.setEpoch(shardConfig.collVersion().epoch());
+        coll.setUpdatedAt(Date_t::fromMillisSinceEpoch(shardConfig.collVersion().toLong()));
+        coll.setKeyPattern(keyPattern.toBSON());
+        coll.setSharded(false);
+        coll.setGlobal(false);
+
+        uassertStatusOK(ShardingCatalogClientImpl::updateShardingCatalogEntryForCollection(
+            opCtx, ns, coll, true /*upsert*/));
+    }
+
     // TODO: SERVER-33094 use UUID returned to write config.collections entries.
 
     // Make sure to advance the opTime if writes didn't occur during the execution of this

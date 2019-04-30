@@ -27,4 +27,4 @@ public:
     static bool isConflict(const GlobalEvent& l, const GlobalEvent& r);
 };
 
-} // napespace mongo
+}  // napespace mongo

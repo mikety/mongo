@@ -47,12 +47,16 @@ CatalogCacheLoader::CollectionAndChangedChunks::CollectionAndChangedChunks(
     const BSONObj& collShardKeyPattern,
     const BSONObj& collDefaultCollation,
     bool collShardKeyIsUnique,
+    bool collIsSharded,
+    bool collIsGlobal,
     std::vector<ChunkType> chunks)
     : uuid(collUuid),
       epoch(collEpoch),
       shardKeyPattern(collShardKeyPattern),
       defaultCollation(collDefaultCollation),
       shardKeyIsUnique(collShardKeyIsUnique),
+      isSharded(collIsSharded),
+      isGlobal(collIsGlobal),
       changedChunks(chunks) {}
 
 void CatalogCacheLoader::set(ServiceContext* serviceContext,

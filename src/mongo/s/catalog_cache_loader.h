@@ -77,6 +77,8 @@ public:
                                    const BSONObj& collShardKeyPattern,
                                    const BSONObj& collDefaultCollation,
                                    bool collShardKeyIsUnique,
+                                   bool collIsSharded,
+                                   bool collIsGlobal,
                                    std::vector<ChunkType> chunks);
 
         // Information about the entire collection
@@ -85,6 +87,8 @@ public:
         BSONObj shardKeyPattern;
         BSONObj defaultCollation;
         bool shardKeyIsUnique{false};
+        bool isSharded{false};
+        bool isGlobal{false};
 
         // The chunks which have changed sorted by their chunkVersion. This list might potentially
         // contain all the chunks in the collection.

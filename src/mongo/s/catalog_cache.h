@@ -104,6 +104,8 @@ private:
 
     NamespaceString _nss;
 
+    bool isSharded() const;
+    bool isGlobal() const;
     // Copy of the database's cached info.
     CachedDatabaseInfo _db;
 

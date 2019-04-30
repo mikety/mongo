@@ -30,9 +30,9 @@ namespace {
  * n3 < n2 < n1
  */
 bool lessThan(size_t node1, size_t node2) {
-    size_t  n1(0);
-    size_t  n2(1);
-    size_t  n3(2);
+    size_t n1(0);
+    size_t n2(1);
+    size_t n3(2);
 
     invariant(node1 == n1 || node1 == n2 || node1 == n3);
     invariant(node2 == n1 || node2 == n2 || node2 == n3);
@@ -53,19 +53,19 @@ bool lessThan(size_t node1, size_t node2) {
 bool Policy::isConflict(const GlobalEvent& l, const GlobalEvent& r) {
     return !l.hb(r) && !r.hb(l);
 }
-    
+
 bool Policy::shouldUpdate(const GlobalEvent& pastEvent, const GlobalEvent& curEvent) {
     // check if events are happened before
     if (pastEvent.hb(curEvent)) {
-        return false; // keep the current event
+        return false;  // keep the current event
     }
 
     if (curEvent.hb(pastEvent)) {
-        return true; // override the current event
+        return true;  // override the current event
     }
 
     // conflict
     // use node priority but it should be policy specific
     return lessThan(curEvent.nodeId(), pastEvent.nodeId());
 }
-} // namespace mongo
+}  // namespace mongo

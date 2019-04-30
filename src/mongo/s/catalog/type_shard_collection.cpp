@@ -46,6 +46,8 @@ const BSONField<OID> ShardCollectionType::epoch("epoch");
 const BSONField<BSONObj> ShardCollectionType::keyPattern("key");
 const BSONField<BSONObj> ShardCollectionType::defaultCollation("defaultCollation");
 const BSONField<bool> ShardCollectionType::unique("unique");
+const BSONField<bool> ShardCollectionType::sharded("partitioned");
+const BSONField<bool> ShardCollectionType::global("global");
 const BSONField<bool> ShardCollectionType::refreshing("refreshing");
 const BSONField<Date_t> ShardCollectionType::lastRefreshedCollectionVersion(
     "lastRefreshedCollectionVersion");
@@ -57,13 +59,17 @@ ShardCollectionType::ShardCollectionType(NamespaceString nss,
                                          OID epoch,
                                          const KeyPattern& keyPattern,
                                          const BSONObj& defaultCollation,
-                                         bool unique)
+                                         bool unique,
+                                         bool sharded,
+                                         bool global)
     : _nss(std::move(nss)),
       _uuid(uuid),
       _epoch(std::move(epoch)),
       _keyPattern(keyPattern.toBSON()),
       _defaultCollation(defaultCollation.getOwned()),
-      _unique(unique) {}
+      _unique(unique),
+      _sharded(sharded),
+      _global(global) {}
 
 StatusWith<ShardCollectionType> ShardCollectionType::fromBSON(const BSONObj& source) {
 
@@ -143,8 +149,26 @@ StatusWith<ShardCollectionType> ShardCollectionType::fromBSON(const BSONObj& sou
         }
     }
 
+    bool sharded;
+    {
+        Status status =
+            bsonExtractBooleanField(source, ShardCollectionType::sharded.name(), &sharded);
+        if (!status.isOK()) {
+            return status;
+        }
+    }
+
+    bool global;
+    {
+        Status status =
+            bsonExtractBooleanField(source, ShardCollectionType::global.name(), &global);
+        if (!status.isOK()) {
+            return status;
+        }
+    }
+
     ShardCollectionType shardCollectionType(
-        std::move(nss), uuid, std::move(epoch), pattern, collation, unique);
+        std::move(nss), uuid, std::move(epoch), pattern, collation, unique, sharded, global);
 
     // Below are optional fields.
 
@@ -192,6 +216,8 @@ BSONObj ShardCollectionType::toBSON() const {
     }
 
     builder.append(unique.name(), _unique);
+    builder.append(sharded.name(), _sharded);
+    builder.append(global.name(), _global);
 
     if (_refreshing) {
         builder.append(refreshing.name(), _refreshing.get());
