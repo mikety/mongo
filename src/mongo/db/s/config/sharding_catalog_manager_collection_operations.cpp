@@ -563,8 +563,8 @@ void ShardingCatalogManager::createCollection(OperationContext* opCtx,
         coll.setEpoch(shardConfig.collVersion().epoch());
         coll.setUpdatedAt(Date_t::fromMillisSinceEpoch(shardConfig.collVersion().toLong()));
         coll.setKeyPattern(keyPattern.toBSON());
-        coll.setSharded(false);
-        coll.setGlobal(false);
+        coll.setSharded(collOptions.sharded);
+        coll.setGlobal(collOptions.global);
 
         uassertStatusOK(ShardingCatalogClientImpl::updateShardingCatalogEntryForCollection(
             opCtx, ns, coll, true /*upsert*/));

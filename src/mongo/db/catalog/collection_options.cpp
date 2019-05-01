@@ -255,6 +255,10 @@ Status CollectionOptions::parse(const BSONObj& options, ParseKind kind) {
             }
 
             idIndex = std::move(tempIdIndex);
+        } else if (fieldName == "sharded") {
+            sharded = e.trueValue();
+        } else if (fieldName == "global") {
+            global = e.trueValue();
         } else if (!createdOn24OrEarlier && !mongo::isGenericArgument(fieldName)) {
             return Status(ErrorCodes::InvalidOptions,
                           str::stream() << "The field '" << fieldName
@@ -337,6 +341,14 @@ void CollectionOptions::appendBSON(BSONObjBuilder* builder) const {
 
     if (!idIndex.isEmpty()) {
         builder->append("idIndex", idIndex);
+    }
+
+    if (sharded) {
+        builder->appendBool("sharded", true);
+    }
+
+    if (global) {
+        builder->appendBool("global", true);
     }
 }
 
@@ -421,6 +433,14 @@ bool CollectionOptions::matchesStorageOptions(const CollectionOptions& other,
     }
 
     if (pipeline.woCompare(other.pipeline) != 0) {
+        return false;
+    }
+
+    if (sharded != other.sharded) {
+        return false;
+    }
+
+    if (global != other.global) {
         return false;
     }
 

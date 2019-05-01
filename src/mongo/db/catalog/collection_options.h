@@ -150,5 +150,8 @@ struct CollectionOptions {
     std::string viewOn;
     // The aggregation pipeline that defines this view.
     BSONObj pipeline;
+
+    bool sharded = false;
+    bool global = false;
 };
 }
