@@ -40,6 +40,8 @@
 #include "mongo/db/server_parameters.h"
 #include "mongo/db/stats/timer_stats.h"
 #include "mongo/rpc/metadata/oplog_query_metadata.h"
+#include "mongo/s/catalog/sharding_catalog_client.h"
+#include "mongo/s/grid.h"
 #include "mongo/util/assert_util.h"
 #include "mongo/util/fail_point_service.h"
 #include "mongo/util/log.h"
@@ -364,7 +366,21 @@ BSONObj GlobalFetcher::_makeFindCommandObject(const NamespaceString& nss,
         _dataReplicatorExternalState->getCurrentTermAndLastCommittedOpTime();
     // auto term = lastCommittedWithCurrentTerm.value;
     BSONObjBuilder cmdBob;
-    StringData mmCollName = "mm_replication.MultiMasterCollection";
+    NamespaceString mmCollName;  // = "mm_replication.MultiMasterCollection";
+    auto opCtx = cc().makeOperationContext();
+
+    const auto globalColls =
+        Grid::get(opCtx.get())
+            ->catalogClient()
+            ->getGlobalCollections(opCtx.get(), repl::ReadConcernLevel::kMajorityReadConcern);
+
+    BSONArrayBuilder bsonGlobalColls;
+    for (const auto coll : globalColls) {
+        bsonGlobalColls.append(coll.ns());
+        //        log() << "MultiMaster GlobalFetcher::_makeFindCommandObject setting globalColl to:
+        //        " << mmCollName;
+    }
+
     if (_isMongodWithGlobalSync) {
         NamespaceString globalNss("local.oplog_global");
         auto instanceId = constructInstanceId();
@@ -397,7 +413,7 @@ BSONObj GlobalFetcher::_makeFindCommandObject(const NamespaceString& nss,
                       BSON("ts" << BSON("$gte" << lastOpTimeFetched.getTimestamp()) << "_gid"
                                 << BSON("$exists" << false)
                                 << "ns"
-                                << mmCollName));
+                                << BSON("$in" << bsonGlobalColls.arr())));
         cmdBob.append("tailable", true);
         cmdBob.append("oplogReplay", true);
         cmdBob.append("awaitData", true);

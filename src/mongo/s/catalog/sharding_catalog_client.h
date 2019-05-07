@@ -174,6 +174,9 @@ public:
     virtual std::vector<NamespaceString> getAllShardedCollectionsForDb(
         OperationContext* opCtx, StringData dbName, repl::ReadConcernLevel readConcern) = 0;
 
+    virtual std::vector<NamespaceString> getGlobalCollections(
+        OperationContext* opCtx, repl::ReadConcernLevel readConcernLevel) = 0;
+
     /**
      * Retrieves all databases for a shard.
      *

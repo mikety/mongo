@@ -283,6 +283,38 @@ StatusWith<repl::OpTimeWith<CollectionType>> ShardingCatalogClientImpl::getColle
     return repl::OpTimeWith<CollectionType>(collType, retOpTimePair.opTime);
 }
 
+std::vector<NamespaceString> ShardingCatalogClientImpl::getGlobalCollections(
+    OperationContext* opCtx, repl::ReadConcernLevel readConcernLevel) {
+    auto findStatus = _exhaustiveFindOnConfig(opCtx,
+                                              kConfigReadSelector,
+                                              readConcernLevel,
+                                              CollectionType::ConfigNS,
+                                              BSON("global" << true),
+                                              BSONObj(),
+                                              boost::none);  // no limit
+    uassertStatusOK(findStatus);
+
+    const auto& docsOpTimePair = findStatus.getValue();
+
+    std::vector<CollectionType> collections;
+    for (const BSONObj& obj : docsOpTimePair.value) {
+        const auto collectionResult = CollectionType::fromBSON(obj);
+        uassertStatusOK(collectionResult);
+        collections.push_back(collectionResult.getValue());
+    }
+
+    std::vector<NamespaceString> collectionsToReturn;
+    for (const auto& coll : collections) {
+        if (coll.getDropped())
+            continue;
+
+        log() << "MultiMaster: got global collection from the catalog: " << coll.getNs();
+        collectionsToReturn.push_back(coll.getNs());
+    }
+
+    return collectionsToReturn;
+}
+
 StatusWith<std::vector<CollectionType>> ShardingCatalogClientImpl::getCollections(
     OperationContext* opCtx,
     const std::string* dbName,

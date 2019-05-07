@@ -82,6 +82,8 @@
 
 #include "mongo/db/auth/user_document_parser.h"  // XXX-ANDY
 #include "mongo/rpc/object_check.h"
+#include "mongo/s/catalog/sharding_catalog_client.h"
+#include "mongo/s/grid.h"
 #include "mongo/s/write_ops/batched_command_request.h"
 #include "mongo/s/write_ops/batched_command_response.h"
 #include "mongo/util/fail_point_service.h"
@@ -368,6 +370,16 @@ bool shouldAcceptUpdate(const std::vector<BSONElement>& histVec, const BSONObj& 
     return true;
 }
 
+bool isGlobalColl(OperationContext* opCtx, NamespaceString ns) {
+    if (!Grid::get(opCtx) || !Grid::get(opCtx)->catalogClient()) {
+        return false;
+    }
+    const auto globalColls = Grid::get(opCtx)->catalogClient()->getGlobalCollections(
+        opCtx, repl::ReadConcernLevel::kMajorityReadConcern);
+
+    return std::find(globalColls.begin(), globalColls.end(), ns) != globalColls.end();
+}
+
 }  // namespace
 
 using std::endl;
@@ -587,8 +599,9 @@ Status CollectionImpl::insertDocuments(OperationContext* opCtx,
     vector<InsertStatement> newDocs;
     StringData mmDbName = "mm_replication";
     StringData mmCollName = "MultiMasterCollection";
-    bool useNewDocs =
-        (isMongodWithGlobalSync && ns().coll() == mmCollName && ns().db() == mmDbName);
+    //    bool useNewDocs = (isMongodWithGlobalSync && ns().coll() == mmCollName && ns().db() ==
+    //    mmDbName);
+    bool useNewDocs = (isMongodWithGlobalSync && isGlobalColl(opCtx, ns()));
     for (auto it = begin; it != end; it++) {
         auto newDoc = it->doc;
         Timestamp remoteTs;
@@ -952,12 +965,13 @@ RecordId CollectionImpl::updateDocument(OperationContext* opCtx,
 
     StringData mmDbName = "mm_replication";
     StringData mmCollName = "MultiMasterCollection";
-    NamespaceString conflictsNss(mmDbName + "." + mmCollName + ".conflicts");
     BSONObj newVersionedDoc;
     bool isUpdated{false};
 
     auto argsCopy = *args;
-    if (isMongodWithGlobalSync && ns().coll() == mmCollName && ns().db() == mmDbName) {
+    if (isMongodWithGlobalSync && isGlobalColl(opCtx, ns())) {
+        NamespaceString conflictsNss(ns().db() + "." + ns().coll() + ".conflicts");
+        // if (isMongodWithGlobalSync && ns().coll() == mmCollName && ns().db() == mmDbName) {
         bool isRemote = GlobalApplyTracker::get(opCtx).isRemote();
         log() << "MultiMaster updateDocument check. Old doc: " << oldDoc.value()
               << " newDoc: " << newDoc << ", isRemote: " << isRemote;
