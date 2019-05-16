@@ -9,7 +9,7 @@
     // const collName = "MultiMasterCollection";
     const collName = "MMColl1";
     const collName2 = "MMColl2";
-    const conflictsCollName = "MultiMasterCollection.conflicts";
+    const conflictsCollName = collName + ".conflicts";
 
     let st = new ShardingTest({
         name: "Xshard",
@@ -46,25 +46,19 @@
     assert.eq(res.n, 0);
 
     jsTestLog("create global collection");
-    assert.commandWorked(mongos.getDB(dbName).runCommand({create: collName, global: true, sharded: false}));
-    assert.commandWorked(mongos.getDB(dbName).runCommand({create: collName2, global: true, sharded: false}));
-
-    jsTestLog("Setting up Global Shards");
-    assert.commandWorked(st.shard0.getDB(dbName).createCollection(collName));
-    assert.commandWorked(st.shard0.getDB(dbName).createCollection(conflictsCollName));
-   /*
-    assert.commandWorked(st.shard1.getDB(dbName).createCollection(collName));
-    assert.commandWorked(st.shard1.getDB(dbName).createCollection(conflictsCollName));
-   */
-    assert.commandWorked(st.shard2.getDB(dbName).createCollection(collName));
-    assert.commandWorked(st.shard2.getDB(dbName).createCollection(collName2));
-    assert.commandWorked(st.shard2.getDB(dbName).createCollection(conflictsCollName));
+    assert.commandWorked(
+        mongos.getDB(dbName).runCommand({create: collName, global: true, sharded: false}));
+    sleep(1000);
+    // assert.commandWorked(st.shard0.getDB(dbName).createCollection(conflictsCollName));
+    // assert.commandWorked(mongos.getDB(dbName).runCommand({create: collName2, global: true,
+    // sharded: false}));
+    // sleep(1000);
 
     assert.commandWorked(st.shard0.getDB("admin").runCommand({replSetStartGlobalSync: 1}));
-
     assert.commandWorked(st.shard1.getDB("admin").runCommand({replSetStartGlobalSync: 1}));
-
     assert.commandWorked(st.shard2.getDB("admin").runCommand({replSetStartGlobalSync: 1}));
+
+    sleep(3000);
 
     let shard0coll = st.shard0.getDB(dbName).getCollection(collName);
     let shard0coll2 = st.shard0.getDB(dbName).getCollection(collName2);
@@ -75,22 +69,23 @@
     for (let i = 1; i <= nDocs; ++i) {
         assert.commandWorked(shard0coll.insert({_id: i, X: "apple", Y: "orange"}));
     }
+    /*
     for (let i = 1; i <= nDocs; ++i) {
         assert.commandWorked(shard0coll2.insert({_id: i, X: "avocado", Y: "chocolate"}));
     }
-    sleep(3000);
+   */
+    sleep(5000);
 
     jsTestLog("Updating on the shard1 docs X");
     for (let i = 1; i <= nDocs; ++i) {
         assert.commandWorked(shard1coll.updateOne({_id: i}, {$set: {Y: "onion"}}));
     }
-    sleep(3000);
 
     jsTestLog("Conflict: Updating on the shard0 docs X");
     for (let i = 1; i <= nDocs; ++i) {
         assert.commandWorked(shard0coll.updateOne({_id: i}, {$set: {X: "garlic"}}));
     }
-    sleep(3000);
+    sleep(5000);
 
     res = assert.commandWorked(globalDB.runCommand({find: "oplog_global"}));
     jsTestLog("Printing: Global Oplog: " + tojson(res));
@@ -101,8 +96,10 @@
     res = assert.commandWorked(st.shard0.getDB(dbName).runCommand({find: collName}));
     jsTestLog("Printing: Shard0  Coll1 Data: " + tojson(res));
 
+    /*
     res = assert.commandWorked(st.shard0.getDB(dbName).runCommand({find: collName2}));
     jsTestLog("Printing: Shard0  Coll2 Data: " + tojson(res));
+   */
 
     res = assert.commandWorked(st.shard0.getDB(dbName).runCommand({find: conflictsCollName}));
     jsTestLog("Printing: Shard0  Conflicts: " + tojson(res));
@@ -113,8 +110,10 @@
     res = assert.commandWorked(st.shard1.getDB(dbName).runCommand({find: collName}));
     jsTestLog("Printing: Shard1  Coll1 Data: " + tojson(res));
 
+    /*
     res = assert.commandWorked(st.shard1.getDB(dbName).runCommand({find: collName2}));
     jsTestLog("Printing: Shard1  Coll2 Data: " + tojson(res));
+   */
 
     res = assert.commandWorked(st.shard1.getDB(dbName).runCommand({find: conflictsCollName}));
     jsTestLog("Printing: Shard1  Conflicts: " + tojson(res));
@@ -125,8 +124,10 @@
     res = assert.commandWorked(st.shard2.getDB(dbName).runCommand({find: collName}));
     jsTestLog("Printing: Shard2  Coll1 Data: " + tojson(res));
 
+    /*
     res = assert.commandWorked(st.shard2.getDB(dbName).runCommand({find: collName2}));
     jsTestLog("Printing: Shard2  Coll2 Data: " + tojson(res));
+    */
 
     res = assert.commandWorked(st.shard2.getDB(dbName).runCommand({find: conflictsCollName}));
     jsTestLog("Printing: Shard2  Conflicts: " + tojson(res));

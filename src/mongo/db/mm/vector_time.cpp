@@ -85,8 +85,13 @@ std::string VectorTime::toString() const {
 
 GlobalEvent::GlobalEvent(VectorTime time, size_t nodeId) : _globalTime(time), _nodeId(nodeId) {}
 
-bool GlobalEvent::hb(const GlobalEvent& r) const {
-    return r._globalTime.timeAtNode(r._nodeId) < _globalTime.timeAtNode(r._nodeId);
+bool GlobalEvent::hb(const GlobalEvent& after) const {
+    for (size_t nodeId = 0; nodeId < VectorTime::NodeVectorSize; ++nodeId) {
+        if (_globalTime.timeAtNode(nodeId) > after._globalTime.timeAtNode(nodeId)) {
+            return false;
+        }
+    }
+    return true;
 }
 
 std::string GlobalEvent::toString() const {

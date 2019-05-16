@@ -75,14 +75,6 @@ namespace mongo {
 
 using std::string;
 
-MONGO_EXPORT_SERVER_PARAMETER(isMongodWithGlobalSync, bool, false);
-MONGO_EXPORT_SERVER_PARAMETER(isMongoG, bool, false);
-
-MONGO_EXPORT_SERVER_PARAMETER(mmPortConfig, int, 20017);
-MONGO_EXPORT_SERVER_PARAMETER(mmPort1, int, 20017);
-MONGO_EXPORT_SERVER_PARAMETER(mmPort2, int, 20017);
-MONGO_EXPORT_SERVER_PARAMETER(mmPort3, int, 20017);
-
 namespace repl {
 
 namespace {
@@ -97,6 +89,7 @@ constexpr int defaultRollbackBatchSize = 2000;
 // the storage engine supports rollback via recover to timestamp.
 constexpr bool forceRollbackViaRefetchByDefault = false;
 
+/*
 static int CurrentSyncSourcePort = 20017;
 
 void computeCurrentSyncSourcePort() {
@@ -127,11 +120,11 @@ void computeCurrentSyncSourcePort() {
     }
     log() << "MultiMaster Computed CurrentSyncSource " << CurrentSyncSourcePort;
 }
-
 std::string computeInstanceId() {
     std::string hostName = getHostNameCached();
     return str::stream() << hostName << ":" << CurrentSyncSourcePort;
 }
+*/
 /**
  * Extends DataReplicatorExternalStateImpl to be member state aware.
  */
@@ -174,17 +167,19 @@ GlobalSync::GlobalSync(ReplicationCoordinator* replicationCoordinator,
                        ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
                        HostAndPort syncSource,
                        const std::string& instanceId,
+                       bool isMongodWithGlobalSync,
+                       bool isMongoG,
                        OpTime lastSynced)
     : _replCoord(replicationCoordinator),
       _replicationCoordinatorExternalState(replicationCoordinatorExternalState),
       _syncSourceHost(syncSource),
       _instanceId(instanceId),
+      _isMongodWithGlobalSync(isMongodWithGlobalSync),
+      _isMongoG(isMongoG),
       _lastOpTimeFetched(lastSynced) {}
 
 void GlobalSync::startup() {
     invariant(!_producerThread);
-    invariant(false);  // POC TODO for now fail it needs proper conversion to atmongod model and
-                       // messaging for discovery other nodes
     _producerThread.reset(new stdx::thread([this] { _run(); }));
 }
 
@@ -268,7 +263,7 @@ void GlobalSync::_runProducer() {
             log() << "MultiMaster _runProducer starting lastOpTimeFetched: " << _lastOpTimeFetched;
         }
         // POC hack
-        computeCurrentSyncSourcePort();
+        // computeCurrentSyncSourcePort();
     }
     _produce();
 }
@@ -290,7 +285,6 @@ void GlobalSync::_produce() {
     }
 
     // _syncSourceHost = HostAndPort("localhost", CurrentSyncSourcePort);
-    log() << "MultiMaster _produce 1 using sync source " << _syncSourceHost;
     // this oplog reader does not do a handshake because we don't want the server it's syncing
     // from to track how far it has synced
     HostAndPort oldSource;
@@ -465,7 +459,10 @@ void GlobalSync::_produce() {
 
     mongo::sleepsecs(1);
     source = _syncSourceHost;
-    lastOpTimeFetched = _lastOpTimeFetched;
+    log() << "MultiMaster _produce 1 starting GlobalFetcher with syncSource " << source;
+    auto firstDocPolicy =
+        (_lastOpTimeFetched != OpTime() ? GlobalFetcher::StartingPoint::kSkipFirstDoc
+                                        : GlobalFetcher::StartingPoint::kEnqueueFirstDoc);
     // "lastFetched" not used. Already set in _enqueueDocuments.
     Status fetcherReturnStatus = Status::OK();
     DataReplicatorExternalStateGlobalSync dataReplicatorExternalState(
@@ -477,11 +474,14 @@ void GlobalSync::_produce() {
         };
         // The construction of GlobalFetcher has to be outside globalSync mutex, because it calls
         // replication coordinator.
+
+        NamespaceString localOplogNS = NamespaceString("local.oplog.rs");
+        NamespaceString remoteOplogNS = NamespaceString("local.oplog.rs");
         auto oplogFetcherPtr = stdx::make_unique<GlobalFetcher>(
             _replicationCoordinatorExternalState->getTaskExecutor(),
-            lastOpTimeFetched,
+            _lastOpTimeFetched,
             source,
-            NamespaceString::kRsOplogNamespace,
+            remoteOplogNS,
             _replicationCoordinatorExternalState->getOplogFetcherSteadyStateMaxFetcherRestarts(),
             // syncSourceResp.rbid,
             0,
@@ -492,14 +492,9 @@ void GlobalSync::_produce() {
             },
             onOplogFetcherShutdownCallbackFn,
             defaultBatchSize,
-            false,  // TODO
-            false,  // TODO add isMongoG
-            GlobalFetcher::StartingPoint::kSkipFirstDoc);
-        /*
-            isMongoG ? GlobalFetcher::StartingPoint::kEnqueueFirstDoc :
-                       GlobalFetcher::StartingPoint::kSkipFirstDoc); // TODO: POC - make it more
-           intelligent.
-         */
+            _isMongodWithGlobalSync,
+            _isMongoG,
+            firstDocPolicy);
         stdx::lock_guard<stdx::mutex> lock(_mutex);
         if (_state != ProducerState::Running) {
             log() << "MultiMaster producer state is not running";
@@ -511,16 +506,16 @@ void GlobalSync::_produce() {
         fassertFailedWithStatus(51092, exceptionToStatus());
     }
 
-    log() << "MultiMaster _produce 2";
-    log() << "scheduling fetcher to read remote oplog on " << source << " starting at "
-          << oplogFetcher->getFindQuery_forTest()["filter"];
+    log() << "MultiMaster _produce 2 enqueFirstDoc: "
+          << (firstDocPolicy == GlobalFetcher::StartingPoint::kEnqueueFirstDoc)
+          << " find query filter: " << oplogFetcher->getFindQuery_forTest()["filter"];
     auto scheduleStatus = oplogFetcher->startup();
-    log() << "MultiMaster _produce 3";
     if (!scheduleStatus.isOK()) {
         warning() << "unable to schedule fetcher to read remote oplog on " << source << ": "
                   << scheduleStatus;
         return;
     }
+    log() << "MultiMaster _produce 3 status OK";
 
     oplogFetcher->join();
     log() << "fetcher stopped reading remote oplog on " << source;
@@ -566,7 +561,7 @@ Status GlobalSync::_enqueueDocuments(Fetcher::Documents::const_iterator begin,
     // If this is the first batch of operations returned from the query, "toApplyDocumentCount" will
     // be one fewer than "networkDocumentCount" because the first document (which was applied
     // previously) is skipped.
-    std::string instanceId = computeInstanceId();
+    // std::string instanceId = computeInstanceId();
 
     log() << "MultiMaster _enqueueDocuments 1";
     if (info.toApplyDocumentCount == 0) {
@@ -580,14 +575,21 @@ Status GlobalSync::_enqueueDocuments(Fetcher::Documents::const_iterator begin,
     // insert documents to the local.oplog_global
     DBDirectClient client(opCtx.get());
 
-    if (isMongoG.load()) {
+    if (_isMongoG) {
+        invariant(!_isMongodWithGlobalSync);
         std::vector<BSONObj> docs;
 
         for (auto iDoc = begin; iDoc != end; ++iDoc) {
+            if (iDoc->hasField("_gid")) {
+                log() << "MultiMaster mongoG somehow got the _gid field in the doc already. "
+                         "skipping: "
+                      << *iDoc;
+                continue;
+            }
             log() << "MultiMaster mongoG _enqueueDocuments adding doc " << *iDoc;
             docs.emplace_back([&] {
                 BSONObjBuilder newDoc;
-                newDoc.append("_gid", instanceId);
+                newDoc.append("_gid", _instanceId);
                 newDoc.append("_lastMod",
                               LogicalClock::get(opCtx.get())->getClusterTime().asTimestamp());
                 newDoc.appendElements(*iDoc);
@@ -611,7 +613,7 @@ Status GlobalSync::_enqueueDocuments(Fetcher::Documents::const_iterator begin,
         }
         log() << "MultiMaster _enqueueDocuments Running command: OK";
     } else {
-        invariant(isMongodWithGlobalSync.load());
+        invariant(_isMongodWithGlobalSync);
         BSONObjBuilder applyOpsBuilder;
         BSONArrayBuilder opsArray(applyOpsBuilder.subarrayStart("applyOps"_sd));
         for (auto iDoc = begin; iDoc != end; ++iDoc) {
@@ -827,6 +829,7 @@ void GlobalSync::start(OperationContext* opCtx) {
     // Explicitly start future read transactions without a timestamp.
     opCtx->recoveryUnit()->setTimestampReadSource(RecoveryUnit::ReadSource::kNoTimestamp);
 
+    /*
     do {
         lastAppliedOpTime = _readLastAppliedOpTime(opCtx);
         stdx::lock_guard<stdx::mutex> lk(_mutex);
@@ -845,8 +848,15 @@ void GlobalSync::start(OperationContext* opCtx) {
         }
         // Reload the last applied optime from disk if it has been changed.
     } while (lastAppliedOpTime != _replCoord->getMyLastAppliedOpTime());
+    */
+    if (_state != ProducerState::Starting) {
+        return;
+    }
+    _state = ProducerState::Running;
 
-    LOG(1) << "globalSync fetch queue set to: " << _lastOpTimeFetched;
+
+    log() << "MultiMaster starting globalSync, fetch queue set to: " << _lastOpTimeFetched
+          << " source: " << _syncSourceHost;
 }
 
 // TODO read only entry from synced collections

@@ -61,12 +61,16 @@ public:
     GlobalEvent(VectorTime time, size_t nodeId);
 
     // the argument has happened before the caller on the argument's node.
-    virtual bool hb(const GlobalEvent& r) const;
+    virtual bool hb(const GlobalEvent& after) const;
 
     virtual ~GlobalEvent() {}
 
     size_t nodeId() const {
         return _nodeId;
+    }
+
+    const VectorTime& globalTime() const {
+        return _globalTime;
     }
 
     std::string toString() const;

@@ -1529,6 +1529,8 @@ Status applyOperation_inlock(OperationContext* opCtx,
     //    setting the timestamp before committing. Assigning a competing timestamp in this
     //    codepath would break that atomicity. Sharding is a consumer of this use-case.
     const bool assignOperationTimestamp = [opCtx, haveWrappingWriteUnitOfWork, mode] {
+        // MM POC hack
+        return false;
         const auto replMode = ReplicationCoordinator::get(opCtx)->getReplicationMode();
         if (opCtx->writesAreReplicated()) {
             // We do not assign timestamps on replicated writes since they will get their oplog

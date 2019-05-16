@@ -290,6 +290,7 @@ StatusWith<GlobalFetcher::DocumentsInfo> GlobalFetcher::validateDocuments(
 
         // Check to see if the oplog entry goes back in time for this document.
         const auto docTS = info.lastDocument.getTimestamp();
+        // POC TODO: this is the wrong check - the entries can be any time.
         if (lastTS >= docTS) {
             return Status(ErrorCodes::OplogOutOfOrder,
                           str::stream() << "Out of order entries in oplog. lastTS: "
@@ -377,6 +378,7 @@ BSONObj GlobalFetcher::_makeFindCommandObject(const NamespaceString& nss,
     BSONArrayBuilder bsonGlobalColls;
     for (const auto coll : globalColls) {
         bsonGlobalColls.append(coll.ns());
+        bsonGlobalColls.append("mm_replication.$cmd");
         //        log() << "MultiMaster GlobalFetcher::_makeFindCommandObject setting globalColl to:
         //        " << mmCollName;
     }

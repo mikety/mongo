@@ -37,6 +37,7 @@
 #include "mongo/bson/timestamp.h"
 #include "mongo/db/concurrency/d_concurrency.h"
 #include "mongo/db/mm/global_initial_syncer.h"
+#include "mongo/db/mm/multi_syncer.h"
 #include "mongo/db/repl/initial_syncer.h"
 #include "mongo/db/repl/member_state.h"
 #include "mongo/db/repl/optime.h"

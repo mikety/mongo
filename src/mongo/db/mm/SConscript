@@ -75,6 +75,7 @@ env.Library(
     target='global_initial_syncer',
     source=[
         'global_initial_syncer.cpp',
+        'multi_syncer.cpp',
     ],
     LIBDEPS=[
         '$BUILD_DIR/mongo/client/fetcher',

@@ -822,9 +822,9 @@ bool DataReplicatorExternalStateInitialGlobalSync::shouldStopFetching(
 void ReplicationCoordinatorImpl::_startGlobalReplication(OperationContext* opCtx) {
 
     auto onGlobalInitialSyncCompletion = [this](const StatusWith<OpTime>& status) {
-        //    auto opCtxHolder = cc().makeOperationContext();
-        log() << "MultiMaster about to start global sync after initial global sync";
-        //    _externalState->startSteadyStateGlobalSync(opCtxHolder.get(), this);
+        // auto opCtxHolder = cc().makeOperationContext();
+        log() << "MultiMaster onGlobalInitialSyncCompletion callback";
+        //_externalState->startSteadyStateGlobalSync(opCtxHolder.get(), this);
     };
 
 
@@ -844,7 +844,7 @@ void ReplicationCoordinatorImpl::_startGlobalReplication(OperationContext* opCtx
             // Must take the lock to set _initialSyncer, but not call it.
             stdx::lock_guard<stdx::mutex> lock(_mutex);
             multiSyncerCopy = std::make_shared<MultiSyncer>(
-                createGlobalInitialSyncerOptions(this, _externalState.get()),
+                // createGlobalInitialSyncerOptions(this, _externalState.get()),
                 stdx::make_unique<DataReplicatorExternalStateInitialGlobalSync>(
                     this, _externalState.get()),
                 this,

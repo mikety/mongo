@@ -86,6 +86,8 @@ public:
                ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
                HostAndPort syncSource,
                const std::string& instanceId,
+               bool isMongodWithGlobalSync,
+               bool isMongoG,
                OpTime lastSynced);
 
     // stop syncing (when this node becomes a primary, e.g.)
@@ -247,6 +249,8 @@ private:
 
     HostAndPort _syncSourceHost;  // (M)
     std::string _instanceId;
+    bool _isMongodWithGlobalSync;
+    bool _isMongoG;
     OpTime _lastOpTimeFetched;  // (M)
 
     // Current sync source resolver validating sync source candidates.
