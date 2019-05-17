@@ -60,11 +60,11 @@ class MultiSyncer {
 public:
     typedef stdx::function<void(const OpTime& lastApplied)> OnCompletionFn;
 
-    MultiSyncer(//const GlobalInitialSyncerOptions& opts,
-                std::unique_ptr<DataReplicatorExternalState> dataReplicatorExternalState,
-                ReplicationCoordinator* replicationCoordinator,
-                ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
-                OnCompletionFn onCompletion);
+    MultiSyncer(  // const GlobalInitialSyncerOptions& opts,
+        std::unique_ptr<DataReplicatorExternalState> dataReplicatorExternalState,
+        ReplicationCoordinator* replicationCoordinator,
+        ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
+        OnCompletionFn onCompletion);
 
     ~MultiSyncer();
 

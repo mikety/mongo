@@ -124,11 +124,11 @@ std::string computeInstanceId(int syncSourcePort) {
 
 /* MultiSyncer */
 
-MultiSyncer::MultiSyncer(//GlobalInitialSyncerOptions opts,
-                         std::unique_ptr<DataReplicatorExternalState> dataReplicatorExternalState,
-                         ReplicationCoordinator* replicationCoordinator,
-                         ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
-                         OnCompletionFn onCompletion)
+MultiSyncer::MultiSyncer(  // GlobalInitialSyncerOptions opts,
+    std::unique_ptr<DataReplicatorExternalState> dataReplicatorExternalState,
+    ReplicationCoordinator* replicationCoordinator,
+    ReplicationCoordinatorExternalState* replicationCoordinatorExternalState,
+    OnCompletionFn onCompletion)
     : _dataReplicatorExternalState(std::move(dataReplicatorExternalState)),
       _replicationCoordinator(replicationCoordinator),
       _replicationCoordinatorExternalState(replicationCoordinatorExternalState),
@@ -139,14 +139,13 @@ MultiSyncer::MultiSyncer(//GlobalInitialSyncerOptions opts,
         auto syncSource = HostAndPort("localhost", syncSourcePort);
         auto instanceId = computeInstanceId(syncSourcePort);  // TODO: change to its own local port
 
-        auto syncer = std::make_unique<GlobalSync>(
-            _replicationCoordinator, 
-            _replicationCoordinatorExternalState,
-             syncSource,
-             instanceId,
-             true,
-             false,
-             OpTime());
+        auto syncer = std::make_unique<GlobalSync>(_replicationCoordinator,
+                                                   _replicationCoordinatorExternalState,
+                                                   syncSource,
+                                                   instanceId,
+                                                   true,
+                                                   false,
+                                                   OpTime());
         /*
         GlobalInitialSyncerOptions options(opts);
         auto syncer = stdx::make_unique<GlobalInitialSyncer>(
@@ -174,14 +173,13 @@ MultiSyncer::MultiSyncer(//GlobalInitialSyncerOptions opts,
         for (const auto syncSourcePort : ports) {
             auto syncSource = HostAndPort("localhost", syncSourcePort);
             auto instanceId = computeInstanceId(syncSourcePort);
-            auto syncer = std::make_unique<GlobalSync>(
-                _replicationCoordinator, 
-                _replicationCoordinatorExternalState,
-                 syncSource,
-                 instanceId,
-                false,
-                true,
-                 OpTime());
+            auto syncer = std::make_unique<GlobalSync>(_replicationCoordinator,
+                                                       _replicationCoordinatorExternalState,
+                                                       syncSource,
+                                                       instanceId,
+                                                       false,
+                                                       true,
+                                                       OpTime());
             /*
             GlobalInitialSyncerOptions options(opts);
 
