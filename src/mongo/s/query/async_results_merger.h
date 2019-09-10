@@ -451,7 +451,7 @@ private:
     AsyncResultsMergerParams _params;
 
     // Must be acquired before accessing any data members (other than _params, which is read-only).
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Data tracking the state of our communication with each of the remote nodes.
     std::vector<RemoteCursorData> _remotes;

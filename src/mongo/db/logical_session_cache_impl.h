@@ -109,7 +109,7 @@ private:
     const std::shared_ptr<SessionsCollection> _sessionsColl;
     const ReapSessionsOlderThanFn _reapSessionsOlderThanFn;
 
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     LogicalSessionIdMap<LogicalSessionRecord> _activeSessions;
 

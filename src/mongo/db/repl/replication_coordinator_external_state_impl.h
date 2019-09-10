@@ -142,7 +142,7 @@ private:
     ServiceContext* _service;
 
     // Guards starting threads and setting _startedThreads
-    stdx::mutex _threadMutex;
+    stdx::mutex _threadMutex{__FILE__, __LINE__};
 
     // Flag for guarding against concurrent data replication stopping.
     bool _stoppingDataReplication = false;
@@ -188,7 +188,7 @@ private:
     Future<void> _oplogApplierShutdownFuture;
 
     // Mutex guarding the _nextThreadId value to prevent concurrent incrementing.
-    stdx::mutex _nextThreadIdMutex;
+    stdx::mutex _nextThreadIdMutex{__FILE__, __LINE__};
     // Number used to uniquely name threads.
     long long _nextThreadId = 0;
 

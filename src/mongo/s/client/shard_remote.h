@@ -133,7 +133,7 @@ private:
     /**
      * Protects _lastCommittedOpTime.
      */
-    mutable stdx::mutex _lastCommittedOpTimeMutex;
+    mutable stdx::mutex _lastCommittedOpTimeMutex{__FILE__, __LINE__};
 
     /**
      * Logical time representing the latest opTime timestamp known to be in this shard's majority

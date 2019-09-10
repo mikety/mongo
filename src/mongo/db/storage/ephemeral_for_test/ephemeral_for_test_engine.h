@@ -127,7 +127,7 @@ public:
 private:
     typedef StringMap<std::shared_ptr<void>> DataMap;
 
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
     DataMap _dataMap;  // All actual data is owned in here
 
     // Notified when we write as everything is considered "journalled" since repl depends on it.

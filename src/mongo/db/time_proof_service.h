@@ -90,7 +90,7 @@ private:
     };
 
     // protects _cache
-    stdx::mutex _cacheMutex;
+    stdx::mutex _cacheMutex{__FILE__, __LINE__};
 
     // one-entry cache
     boost::optional<CacheEntry> _cache;

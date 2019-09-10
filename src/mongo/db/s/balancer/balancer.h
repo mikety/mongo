@@ -208,7 +208,7 @@ private:
                            const BSONObj& minKey);
 
     // Protects the state below
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Indicates the current state of the balancer
     State _state{kStopped};

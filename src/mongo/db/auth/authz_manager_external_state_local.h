@@ -161,7 +161,7 @@ private:
     /**
      * Guards _roleGraphState and _roleGraph.
      */
-    stdx::mutex _roleGraphMutex;
+    stdx::mutex _roleGraphMutex{__FILE__, __LINE__};
 };
 
 }  // namespace mongo

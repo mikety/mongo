@@ -134,7 +134,7 @@ private:
         executor::TaskExecutor::EventHandle _sufficientResponsesReceived;
         std::vector<executor::TaskExecutor::CallbackHandle> _callbacks;
         bool _started = false;
-        stdx::mutex _mutex;
+        stdx::mutex _mutex{__FILE__, __LINE__};
     };
 
     executor::TaskExecutor* _executor;  // Not owned here.

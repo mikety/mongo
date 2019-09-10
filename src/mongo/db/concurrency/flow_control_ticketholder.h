@@ -93,7 +93,7 @@ private:
     // Use an int64_t as this is serialized to bson which does not support unsigned 64-bit numbers.
     AtomicWord<std::int64_t> _totalTimeAcquiringMicros;
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
     stdx::condition_variable _cv;
     int _tickets;
 

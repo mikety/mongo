@@ -187,7 +187,7 @@ private:
     boost::filesystem::path _path;
 
     // Mutex to protect the condvar, configuration changes, and most recent periodic document.
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
     stdx::condition_variable _condvar;
 
     // Config settings that are used by controller, file manager, and all other classes.

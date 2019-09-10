@@ -52,10 +52,10 @@ mutex::mutex(const StringData& file, unsigned int line): _isTraced(true), _name(
 mutex::mutex(const StringData& name) : _name(name) {}
 
 void mutex::lock() {
-    if (gLockActions && _isTraced) {
+    if (_isTraced) {
         std::stringstream l;
         l << "#LOCK_MUTEX#" << stdx::this_thread::get_id() << "#" << _mutexId << "#UNDEF"; 
-        gLockActions->onLockTraced(l.str());
+        log() << l.str();
     }
     auto hasLock = _mutex.try_lock_for(kContendedLockTimeout.toSystemDuration());
     if (hasLock) {
@@ -68,19 +68,19 @@ void mutex::lock() {
 }
 
 void mutex::unlock() {
-    if (gLockActions && _isTraced) {
+    if (_isTraced) {
         std::stringstream l;
         l << "#UNLOCK_MUTEX#" << stdx::this_thread::get_id() << "#" << _mutexId << "#UNDEF"; 
-        gLockActions->onUnlockTraced(l.str());
+        log() << l.str();
     }
     _mutex.unlock();
 }
 
 void mutex::lock(const std::string& text) {
-    if (gLockActions && _isTraced) {
-       std::stringstream log;
-       log << "#LOCK_DETAILS#" << stdx::this_thread::get_id() << "#" << _mutexId << "#" << text; 
-       gLockActions->onLockTraced(log.str());
+    if (_isTraced) {
+        std::stringstream l;
+        l << "#LOCK_DETAILS#" << stdx::this_thread::get_id() << "#" << _mutexId << "#" << text; 
+        log() << l.str();
     }
     auto hasLock = _mutex.try_lock_for(kContendedLockTimeout.toSystemDuration());
     if (hasLock) {
@@ -93,10 +93,10 @@ void mutex::lock(const std::string& text) {
 }
 
 void mutex::unlock(const std::string& text) {
-    if (gLockActions && _isTraced) {
-        std::stringstream log;
-        log << "#UNLOCK_DETAILS#" << stdx::this_thread::get_id() << "#" << _mutexId << "#" << text; 
-        gLockActions->onUnlockTraced(log.str());
+    if (_isTraced) {
+        std::stringstream l;
+        l << "#UNLOCK_DETAILS#" << stdx::this_thread::get_id() << "#" << _mutexId << "#" << text; 
+        log() << l.str();
     }
     _mutex.unlock();
 }

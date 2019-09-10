@@ -222,7 +222,7 @@ private:
     // Controls concurrent access to '_indexMultikeyPaths'. We acquire this mutex rather than the
     // RESOURCE_METADATA lock as a performance optimization so that it is cheaper to detect whether
     // there is actually any path-level multikey information to update or not.
-    mutable stdx::mutex _indexMultikeyPathsMutex;
+    mutable stdx::mutex _indexMultikeyPathsMutex{__FILE__, __LINE__};
 
     // Non-empty only if '_indexTracksPathLevelMultikeyInfo' is true.
     //

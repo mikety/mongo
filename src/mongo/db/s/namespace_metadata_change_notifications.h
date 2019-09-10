@@ -114,7 +114,7 @@ private:
 
     void _unregisterNotificationToken(std::shared_ptr<NotificationToken> token);
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
     std::map<NamespaceString, NotificationsList> _notificationsList;
 };
 

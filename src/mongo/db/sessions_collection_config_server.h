@@ -64,7 +64,7 @@ private:
     Status _shardCollectionIfNeeded(OperationContext* opCtx);
     Status _generateIndexesIfNeeded(OperationContext* opCtx);
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 };
 
 }  // namespace mongo

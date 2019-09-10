@@ -135,7 +135,7 @@ protected:
 
 private:
     // Protects member data of this base cloner fixture.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     stdx::condition_variable _setStatusCondition;
 

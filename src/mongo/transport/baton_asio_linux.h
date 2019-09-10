@@ -455,7 +455,7 @@ private:
         return EventFDHolder::getForClient(_opCtx->getClient());
     }
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     OperationContext* _opCtx;
 

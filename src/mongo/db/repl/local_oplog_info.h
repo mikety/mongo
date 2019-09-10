@@ -92,7 +92,7 @@ private:
 
     // Synchronizes the section where a new Timestamp is generated and when it is registered in the
     // storage engine.
-    mutable stdx::mutex _newOpMutex;
+    mutable stdx::mutex _newOpMutex{__FILE__, __LINE__};
 };
 
 }  // namespace repl

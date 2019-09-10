@@ -199,7 +199,7 @@ private:
      */
     void _requireValidCatalog(WithLock);
 
-    stdx::mutex _mutex;  // Protects all members.
+    stdx::mutex _mutex{__FILE__, __LINE__};  // Protects all members.
     ViewMap _viewMap;
     ViewMap _viewMapBackup;
     std::unique_ptr<DurableViewCatalog> _durable;

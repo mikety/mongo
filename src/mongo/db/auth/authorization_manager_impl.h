@@ -232,7 +232,7 @@ private:
 
     InvalidatingLRUCache<UserName, User, UserCacheInvalidator> _userCache;
 
-    stdx::mutex _pinnedUsersMutex;
+    stdx::mutex _pinnedUsersMutex{__FILE__, __LINE__};
     stdx::condition_variable _pinnedUsersCond;
     std::once_flag _pinnedThreadTrackerStarted;
     boost::optional<std::vector<UserName>> _usersToPin;
@@ -241,7 +241,7 @@ private:
      * Protects _cacheGeneration, _version and _isFetchPhaseBusy.  Manipulated
      * via CacheGuard.
      */
-    stdx::mutex _cacheWriteMutex;
+    stdx::mutex _cacheWriteMutex{__FILE__, __LINE__};
 
     /**
      * Current generation of cached data.  Updated every time part of the cache gets

@@ -530,6 +530,8 @@ private:
         std::unique_ptr<ClientObserver> _observer;
     };
 
+    // stdx::mutex _mutex{__FILE__, __LINE__};
+    // MUTEX_COREDUMP
     stdx::mutex _mutex;
 
     /**

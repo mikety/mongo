@@ -254,7 +254,7 @@ protected:
     // For synchronous connections where we don't have an async timer, just take a dummy lock and
     // pass it to the WithLock version of handshakeSSLForEgress
     Future<void> handshakeSSLForEgress(const HostAndPort& target) {
-        stdx::mutex mutex;
+        stdx::mutex mutex{__FILE__, __LINE__};
         return handshakeSSLForEgressWithLock(stdx::unique_lock<stdx::mutex>(mutex), target);
     }
 #endif

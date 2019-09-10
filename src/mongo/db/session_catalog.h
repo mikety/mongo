@@ -153,7 +153,7 @@ private:
     void _releaseSession(SessionRuntimeInfo* sri, boost::optional<KillToken> killToken);
 
     // Protects the state below
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Owns the Session objects for all current Sessions.
     SessionRuntimeInfoMap _sessions;

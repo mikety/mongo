@@ -72,7 +72,7 @@ private:
         bool isInProgress = true;
     };
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
     StringMap<std::shared_ptr<NSLock>> _inProgressMap;
 };
 

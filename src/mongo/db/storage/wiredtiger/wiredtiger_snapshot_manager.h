@@ -91,11 +91,11 @@ public:
 
 private:
     // Snapshot to use for reads at a commit timestamp.
-    mutable stdx::mutex _committedSnapshotMutex;  // Guards _committedSnapshot.
+    mutable stdx::mutex _committedSnapshotMutex{__FILE__, __LINE__};  // Guards _committedSnapshot.
     boost::optional<Timestamp> _committedSnapshot;
 
     // Snapshot to use for reads at a local stable timestamp.
-    mutable stdx::mutex _localSnapshotMutex;  // Guards _localSnapshot.
+    mutable stdx::mutex _localSnapshotMutex{__FILE__, __LINE__};  // Guards _localSnapshot.
     boost::optional<Timestamp> _localSnapshot;
 };
 }  // namespace mongo

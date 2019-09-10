@@ -106,7 +106,7 @@ struct ReplIndexBuildState {
     IndexBuildProtocol protocol;
 
     // Protects the state below.
-    mutable stdx::mutex mutex;
+    mutable stdx::mutex mutex{__FILE__, __LINE__};
 
     // Secondaries do not set this information, so it is only set on primaries or on
     // transition to primary.

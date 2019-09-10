@@ -325,7 +325,7 @@ private:
     std::unique_ptr<SessionCatalogMigrationSource> _sessionCatalogSource;
 
     // Protects the entries below
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // The current state of the cloner
     State _state{kNew};

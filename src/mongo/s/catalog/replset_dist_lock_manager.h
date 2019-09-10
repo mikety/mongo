@@ -132,7 +132,7 @@ private:
     const Milliseconds _pingInterval;                 // (I)
     const Milliseconds _lockExpiration;               // (I)
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
     std::unique_ptr<stdx::thread> _execThread;  // (S)
 
     // Contains the list of locks queued for unlocking. Cases when unlock operation can

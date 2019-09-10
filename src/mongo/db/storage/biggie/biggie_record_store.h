@@ -138,10 +138,10 @@ private:
     std::string _prefix;
     std::string _postfix;
 
-    mutable stdx::mutex _cappedCallbackMutex;  // Guards _cappedCallback
+    mutable stdx::mutex _cappedCallbackMutex{__FILE__, __LINE__};  // Guards _cappedCallback
     CappedCallback* _cappedCallback;
 
-    mutable stdx::mutex _cappedDeleterMutex;
+    mutable stdx::mutex _cappedDeleterMutex{__FILE__, __LINE__};
 
     AtomicWord<long long> _highestRecordId{1};
     AtomicWord<long long> _numRecords{0};

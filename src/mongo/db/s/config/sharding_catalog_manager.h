@@ -504,7 +504,7 @@ private:
     // (S) Self-synchronizing; access in any way from any context.
     //
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // True if shutDown() has been called. False, otherwise.
     bool _inShutdown{false};  // (M)

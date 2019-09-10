@@ -388,7 +388,7 @@ private:
     using CollectionsByDbMap = StringMap<CollectionInfoMap>;
 
     // Mutex to serialize access to the structures below
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Map from DB name to the info for that database
     DatabaseInfoMap _databases;

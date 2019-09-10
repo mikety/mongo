@@ -170,7 +170,7 @@ private:
     std::unique_ptr<Pipeline, PipelineDeleter> _pipeline;
 
     // Synchronization.
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
     stdx::condition_variable_any _haveBufferSpace;
 
     // A thread that is currently loading the exchange buffers.

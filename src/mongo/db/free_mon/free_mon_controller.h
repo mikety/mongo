@@ -191,7 +191,7 @@ private:
     State _state{State::kNotStarted};
 
     // Mutext to protect internal state
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Set of registration collectors
     FreeMonCollectorCollection _registrationCollectors;

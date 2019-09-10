@@ -131,7 +131,7 @@ private:
 
     stdx::thread _thread;
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
     stdx::condition_variable _callerCV;
     stdx::condition_variable _killerCV;
 

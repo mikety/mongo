@@ -155,6 +155,7 @@
 #include "mongo/scripting/dbdirectclient_factory.h"
 #include "mongo/scripting/engine.h"
 #include "mongo/stdx/future.h"
+#include "mongo/stdx/lock_actions.h"
 #include "mongo/stdx/thread.h"
 #include "mongo/transport/transport_layer_manager.h"
 #include "mongo/util/assert_util.h"
@@ -657,6 +658,7 @@ ExitCode _initAndListen(int listenPort) {
         }
     }
 
+    stdx::mutex::setLockActions(std::make_unique<LockActionsImpl>());
     serviceContext->notifyStartupComplete();
 
 #ifndef _WIN32

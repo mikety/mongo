@@ -702,7 +702,7 @@ private:
     ClockSource* _clockSource;
 
     // Synchronizes access to all private state variables below.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     bool _inShutdown{false};
 

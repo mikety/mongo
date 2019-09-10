@@ -66,7 +66,7 @@ private:
 
     AtomicWord<bool> _stillRunning{false};
 
-    mutable stdx::mutex _shutdownMutex;
+    mutable stdx::mutex _shutdownMutex{__FILE__, __LINE__};
     stdx::condition_variable _shutdownCondition;
 
     AtomicWord<size_t> _numRunningWorkerThreads{0};

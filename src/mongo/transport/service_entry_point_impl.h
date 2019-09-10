@@ -81,7 +81,7 @@ private:
     ServiceContext* const _svcCtx;
     AtomicWord<std::size_t> _nWorkers;
 
-    mutable stdx::mutex _sessionsMutex;
+    mutable stdx::mutex _sessionsMutex{__FILE__, __LINE__};
     stdx::condition_variable _shutdownCondition;
     SSMList _sessions;
 

@@ -99,7 +99,7 @@ private:
     void _clearMovePrimary();
 
     // Protects the state below
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // If there is an active movePrimary operation going on, this field contains the request that
     // initiated it.

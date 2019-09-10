@@ -75,7 +75,7 @@ private:
      * Protects member data of this class during start and stop. There is no need to synchronize
      * access once its running because its run by a one thread only.
      */
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     std::unique_ptr<PeriodicNoopRunner> _noopRunner;
 };

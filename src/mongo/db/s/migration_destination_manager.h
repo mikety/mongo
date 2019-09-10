@@ -178,7 +178,7 @@ private:
     bool _isActive(WithLock) const;
 
     // Mutex to guard all fields
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Migration session ID uniquely identifies the migration and indicates whether the prepare
     // method has been called.

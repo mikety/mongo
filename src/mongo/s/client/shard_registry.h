@@ -286,7 +286,7 @@ private:
     ShardRegistryData _data;
 
     // Protects the _reloadState and _initConfigServerCS during startup.
-    mutable stdx::mutex _reloadMutex;
+    mutable stdx::mutex _reloadMutex{__FILE__, __LINE__};
     stdx::condition_variable _inReloadCV;
 
     enum class ReloadState {

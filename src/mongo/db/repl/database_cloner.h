@@ -212,7 +212,7 @@ private:
     // (S)  Self-synchronizing; access in any way from any context.
     // (RT)  Read-only in concurrent operation; synchronized externally by tests
     //
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
     mutable stdx::condition_variable _condition;                 // (M)
     executor::TaskExecutor* _executor;                           // (R)
     ThreadPool* _dbWorkThreadPool;                               // (R)

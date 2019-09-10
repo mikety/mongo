@@ -96,7 +96,7 @@ public:
 private:
     friend class Context;
 
-    stdx::mutex _lock;
+    stdx::mutex _lock{__FILE__, __LINE__};
     std::vector<UniqueOperationContext> _contexts;
 
 };  // class OperationContextGroup

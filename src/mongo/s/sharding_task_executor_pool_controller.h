@@ -194,7 +194,7 @@ private:
 
     ReplicaSetChangeListenerHandle _listener;
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Entires to _poolDatas are added by addHost() and removed by removeHost()
     stdx::unordered_map<PoolId, PoolData> _poolDatas;

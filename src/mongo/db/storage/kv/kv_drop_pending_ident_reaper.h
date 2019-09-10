@@ -113,7 +113,7 @@ private:
     KVEngine* const _engine;
 
     // Guards access to member variables below.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Drop-pending idents. Ordered by drop timestamp.
     DropPendingIdents _dropPendingIdents;

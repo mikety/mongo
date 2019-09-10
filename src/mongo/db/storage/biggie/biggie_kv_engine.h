@@ -170,7 +170,7 @@ private:
     std::map<std::string, bool> _idents;  // TODO : replace with a query to _master.
     std::unique_ptr<VisibilityManager> _visibilityManager;
 
-    mutable stdx::mutex _masterLock;
+    mutable stdx::mutex _masterLock{__FILE__, __LINE__};
     StringStore _master;
     uint64_t _masterVersion = 0;
 };

@@ -107,7 +107,7 @@ private:
     ServiceContext* const _service;
 
     // The mutex protects _clusterTime and _isEnabled.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
     LogicalTime _clusterTime;
     bool _isEnabled{true};
 };

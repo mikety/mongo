@@ -89,7 +89,7 @@ private:
     void _setOplogReadTimestamp(WithLock, uint64_t newTimestamp);
 
     stdx::thread _oplogJournalThread;
-    mutable stdx::mutex _oplogVisibilityStateMutex;
+    mutable stdx::mutex _oplogVisibilityStateMutex{__FILE__, __LINE__};
     mutable stdx::condition_variable
         _opsWaitingForJournalCV;  // Signaled to trigger a journal flush.
     mutable stdx::condition_variable

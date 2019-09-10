@@ -408,7 +408,7 @@ public:
     Timestamp oldestOpenReadTimestamp = Timestamp::min();
 
 private:
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
     int _rbid;
     bool _rbidInitialized = false;
     Timestamp _stableTimestamp = Timestamp::min();

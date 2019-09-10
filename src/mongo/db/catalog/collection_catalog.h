@@ -242,7 +242,7 @@ private:
 
     const std::vector<CollectionUUID>& _getOrdering_inlock(const StringData& db,
                                                            const stdx::lock_guard<stdx::mutex>&);
-    mutable mongo::stdx::mutex _catalogLock;
+    mutable mongo::stdx::mutex _catalogLock{__FILE__, __LINE__};
 
     /**
      * When present, indicates that the catalog is in closed state, and contains a map from UUID
@@ -266,7 +266,7 @@ private:
     uint64_t _generationNumber;
 
     // Protects _resourceInformation.
-    mutable stdx::mutex _resourceLock;
+    mutable stdx::mutex _resourceLock{__FILE__, __LINE__};
 
     // Mapping from ResourceId to a set of strings that contains collection and database namespaces.
     std::map<ResourceId, std::set<std::string>> _resourceInformation;

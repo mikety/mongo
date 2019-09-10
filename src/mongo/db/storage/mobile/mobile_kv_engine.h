@@ -143,7 +143,7 @@ public:
 private:
     void maybeVacuum(Client* client, Date_t deadline);
 
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
     void _initDBPath(const std::string& path);
     std::int32_t _setSQLitePragma(const std::string& pragma, sqlite3* session);
 

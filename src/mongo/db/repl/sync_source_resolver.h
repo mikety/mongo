@@ -234,7 +234,7 @@ private:
     const OnCompletionFn _onCompletion;
 
     // Protects members of this sync source resolver defined below.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
     mutable stdx::condition_variable _condition;
 
     // State transitions:

@@ -149,7 +149,7 @@ private:
     CallbackFn _onCompletion;
 
     // Protects member data of this MultiApplier.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     stdx::condition_variable _condition;
 

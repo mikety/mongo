@@ -108,7 +108,7 @@ private:
     void _setUUIDOrError(std::string nss, StatusWith<boost::optional<UUID>> swUUID);
 
     // Protects the state below
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Map containing any collections currently being sharded
     StringMap<std::shared_ptr<ActiveShardCollectionState>> _activeShardCollectionMap;

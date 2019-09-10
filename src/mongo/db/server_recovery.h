@@ -81,7 +81,7 @@ public:
     void clearStateBeforeRecovery();
 
 private:
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
     std::set<std::string> _collectionsAlwaysNeedingSizeAdjustment;
 };
 

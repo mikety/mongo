@@ -322,7 +322,7 @@ private:
     stdx::condition_variable _condvar;
 
     // Lock for condition variable and to protect state
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Indicates whether _status has been set
     bool _set{false};

@@ -89,7 +89,7 @@ private:
     };
 
     // Protects _infos, _cur, and _prev.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // We use 2 so we can flip for getLastError type operations.
     RequestInfo _infos[2];

@@ -158,7 +158,7 @@ private:
     /**
      * Guards all non-const, non-thread-safe members.
      */
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     /**
      * The number of bytes currently in the in-memory buffer.

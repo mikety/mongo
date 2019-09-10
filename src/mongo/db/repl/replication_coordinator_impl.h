@@ -565,7 +565,7 @@ private:
         // Tracks number of operations left running on step down.
         size_t _userOpsRunning = 0;
         // Protects killSignaled and stopKillingOps cond. variable.
-        stdx::mutex _mutex;
+        stdx::mutex _mutex{__FILE__, __LINE__};
         // Signals thread about the change of killSignaled value.
         stdx::condition_variable _stopKillingOps;
         // Once this is set to true, the killOpThreadFn method will terminate.
@@ -1349,7 +1349,7 @@ private:
     // (I)  Independently synchronized, see member variable comment.
 
     // Protects member data of this ReplicationCoordinator.
-    mutable stdx::mutex _mutex;  // (S)
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};  // (S)
 
     // Handles to actively queued heartbeats.
     HeartbeatHandles _heartbeatHandles;  // (M)

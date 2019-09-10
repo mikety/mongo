@@ -122,8 +122,8 @@ private:
 
     SignedLogicalTime _getProof(const KeysCollectionDocument& keyDoc, LogicalTime newTime);
 
-    stdx::mutex _mutex;            // protects _lastSeenValidTime
-    stdx::mutex _mutexKeyManager;  // protects _keyManager
+    stdx::mutex _mutex{__FILE__, __LINE__};            // protects _lastSeenValidTime
+    stdx::mutex _mutexKeyManager{__FILE__, __LINE__};  // protects _keyManager
     SignedLogicalTime _lastSeenValidTime;
     TimeProofService _timeProofService;
     std::shared_ptr<KeysCollectionManager> _keyManager;

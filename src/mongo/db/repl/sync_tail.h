@@ -263,7 +263,7 @@ private:
     const OplogApplier::Options _options;
 
     // Protects member data of SyncTail.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Set to true if shutdown() has been called.
     bool _inShutdown = false;

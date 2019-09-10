@@ -76,7 +76,7 @@ public:
     void waitForAllEarlierOplogWritesToBeVisible(OperationContext* opCtx);
 
 private:
-    mutable stdx::mutex _stateLock;  // Protects the values below.
+    mutable stdx::mutex _stateLock{__FILE__, __LINE__};  // Protects the values below.
     RecordId _highestSeen = RecordId();
 
     // Used to wait for all earlier oplog writes to be visible.

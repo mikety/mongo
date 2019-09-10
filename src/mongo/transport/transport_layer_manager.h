@@ -101,7 +101,7 @@ private:
     template <typename Callable>
     void _foreach(Callable&& cb) const;
 
-    mutable stdx::mutex _tlsMutex;
+    mutable stdx::mutex _tlsMutex{__FILE__, __LINE__};
     std::vector<std::unique_ptr<TransportLayer>> _tls;
 };
 

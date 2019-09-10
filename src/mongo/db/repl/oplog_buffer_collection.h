@@ -177,7 +177,7 @@ private:
     stdx::condition_variable _cvNoLongerEmpty;
 
     // Protects member data below and synchronizes it with the underlying collection.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Number of documents in buffer.
     std::size_t _count = 0;

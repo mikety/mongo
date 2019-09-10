@@ -240,7 +240,7 @@ public:
 
     AtomicWord<bool> isRemovedFromManager{false};
 
-    stdx::mutex mutex;  // You must hold this to access any member below.
+    stdx::mutex mutex{__FILE__, __LINE__};  // You must hold this to access any member below.
 
     executor::TaskExecutor::CallbackHandle refresherHandle;
 

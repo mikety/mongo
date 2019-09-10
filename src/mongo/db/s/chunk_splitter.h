@@ -107,7 +107,7 @@ private:
                        long dataWritten);
 
     // Protects the state below.
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // The ChunkSplitter is only active on a primary node.
     bool _isPrimary{false};

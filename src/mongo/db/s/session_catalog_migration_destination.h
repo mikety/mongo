@@ -116,7 +116,7 @@ private:
     stdx::thread _thread;
 
     // Protects _state and _errMsg.
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
     stdx::condition_variable _isStateChanged;
     State _state = State::NotStarted;
     std::string _errMsg;  // valid only if _state == ErrorOccurred.

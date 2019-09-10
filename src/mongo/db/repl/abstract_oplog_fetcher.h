@@ -214,7 +214,7 @@ private:
     const std::size_t _maxFetcherRestarts;
 
     // Protects member data of this AbstractOplogFetcher.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Function to call when the oplog fetcher shuts down.
     OnShutdownCallbackFn _onShutdownCallbackFn;

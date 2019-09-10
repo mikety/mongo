@@ -261,7 +261,7 @@ private:
     };
     typedef std::map<std::string, Entry> NSToIdentMap;
     NSToIdentMap _idents;
-    mutable stdx::mutex _identsLock;
+    mutable stdx::mutex _identsLock{__FILE__, __LINE__};
 
     // Manages the feature document that may be present in the DurableCatalogImpl. '_featureTracker'
     // is guaranteed to be non-null after DurableCatalogImpl::init() is called.

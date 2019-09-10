@@ -125,7 +125,7 @@ private:
     // Use an int64_t as this is serialized to bson which does not support unsigned 64-bit numbers.
     AtomicWord<std::int64_t> _isLaggedTimeMicros{0};
 
-    mutable stdx::mutex _sampledOpsMutex;
+    mutable stdx::mutex _sampledOpsMutex{__FILE__, __LINE__};
     std::deque<Sample> _sampledOpsApplied;
 
     // These values are used in the sampling process.

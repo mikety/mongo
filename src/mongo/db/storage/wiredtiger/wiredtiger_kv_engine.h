@@ -393,7 +393,7 @@ private:
 
     std::uint64_t _getCheckpointTimestamp() const;
 
-    mutable stdx::mutex _oldestActiveTransactionTimestampCallbackMutex;
+    mutable stdx::mutex _oldestActiveTransactionTimestampCallbackMutex{__FILE__, __LINE__};
     StorageEngine::OldestActiveTransactionTimestampCallback
         _oldestActiveTransactionTimestampCallback;
 
@@ -404,7 +404,7 @@ private:
     ClockSource* const _clockSource;
 
     // Mutex to protect use of _oplogManagerCount by this instance of KV engine.
-    mutable stdx::mutex _oplogManagerMutex;
+    mutable stdx::mutex _oplogManagerMutex{__FILE__, __LINE__};
     std::size_t _oplogManagerCount = 0;
     std::unique_ptr<WiredTigerOplogManager> _oplogManager;
 
@@ -435,15 +435,15 @@ private:
     std::string _rsOptions;
     std::string _indexOptions;
 
-    mutable stdx::mutex _dropAllQueuesMutex;
-    mutable stdx::mutex _identToDropMutex;
+    mutable stdx::mutex _dropAllQueuesMutex{__FILE__, __LINE__};
+    mutable stdx::mutex _identToDropMutex{__FILE__, __LINE__};
     std::list<std::string> _identToDrop;
 
     mutable Date_t _previousCheckedDropsQueued;
 
     std::unique_ptr<WiredTigerSession> _backupSession;
     WT_CURSOR* _backupCursor;
-    mutable stdx::mutex _oplogPinnedByBackupMutex;
+    mutable stdx::mutex _oplogPinnedByBackupMutex{__FILE__, __LINE__};
     boost::optional<Timestamp> _oplogPinnedByBackup;
     Timestamp _recoveryTimestamp;
 

@@ -392,7 +392,7 @@ private:
 
     typedef std::map<PoolKey, PoolForHost, poolKeyCompare> PoolMap;  // servername -> pool
 
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
     std::string _name;
 
     // The maximum number of connections we'll save in the pool per-host

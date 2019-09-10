@@ -58,7 +58,7 @@ public:
 
 private:
     AtomicWord<bool> _isEmpty;
-    stdx::mutex _queueMutex;
+    stdx::mutex _queueMutex{__FILE__, __LINE__};
     std::queue<std::string> _opQueryQueue;
 };
 
@@ -107,7 +107,7 @@ private:
     sqlite3* _popSession_inlock();
 
     // This is used to lock the _sessions vector.
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
     stdx::condition_variable _releasedSessionNotifier;
 
     std::string _path;

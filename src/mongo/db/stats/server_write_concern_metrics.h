@@ -97,7 +97,7 @@ private:
         StringMap<std::uint64_t> wTagCounts;
     };
 
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
     WriteConcernMetricsForOperationType _insertMetrics;
     WriteConcernMetricsForOperationType _updateMetrics;
     WriteConcernMetricsForOperationType _deleteMetrics;

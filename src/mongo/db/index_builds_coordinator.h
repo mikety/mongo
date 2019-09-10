@@ -409,7 +409,7 @@ protected:
         const UUID& buildUUID) noexcept;
 
     // Protects the below state.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // New index builds are not allowed on a collection or database if the collection or database is
     // in either of these maps. These are used when concurrent operations need to abort index builds

@@ -87,7 +87,7 @@ private:
 
     boost::optional<SessionKiller::Matcher> _matcher;
 
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
     LogicalSessionIdSet _activeSessions;
     LogicalSessionIdSet _cursorSessions;
 };

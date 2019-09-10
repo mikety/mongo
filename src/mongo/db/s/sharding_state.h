@@ -136,7 +136,7 @@ private:
     }
 
     // Protects state below
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // State of the initialization of the sharding state along with any potential errors
     AtomicWord<unsigned> _initializationState{static_cast<uint32_t>(InitializationState::kNew)};

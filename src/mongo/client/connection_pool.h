@@ -194,7 +194,7 @@ private:
     const int _messagingPortTags;
 
     // Mutex guarding members of the connection pool
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Map from HostAndPort to idle connections.
     HostConnectionMap _connections;

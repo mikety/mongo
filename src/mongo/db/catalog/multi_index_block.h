@@ -344,7 +344,7 @@ private:
     bool _constraintsChecked = false;
 
     // Protects member variables of this class declared below.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     State _state = State::kUninitialized;
     std::string _abortReason;

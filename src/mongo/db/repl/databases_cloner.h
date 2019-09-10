@@ -175,7 +175,7 @@ private:
     // (M)  Reads and writes guarded by _mutex
     // (S)  Self-synchronizing; access in any way from any context.
     //
-    mutable stdx::mutex _mutex;                         // (S)
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};                         // (S)
     Status _status{ErrorCodes::NotYetInitialized, ""};  // (M) If it is not OK, we stop everything.
     executor::TaskExecutor* _exec;                      // (R) executor to schedule things with
     ThreadPool* _dbWorkThreadPool;       // (R) db worker thread pool for collection cloning.

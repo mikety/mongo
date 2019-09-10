@@ -68,7 +68,7 @@ private:
     const std::string _purpose;
     KeysCollectionClient* const _client;
 
-    stdx::mutex _cacheMutex;
+    stdx::mutex _cacheMutex{__FILE__, __LINE__};
     std::map<LogicalTime, KeysCollectionDocument> _cache;  // expiresAt -> KeysDocument
 };
 

@@ -131,7 +131,7 @@ private:
     std::string _toString(WithLock wl) const;
 
     // Protects the state below.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Contains TransactionCoordinator objects by session id and transaction number. May contain
     // more than one coordinator per session. All coordinators for a session that do not correspond

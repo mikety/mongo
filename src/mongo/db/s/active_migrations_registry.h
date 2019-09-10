@@ -152,7 +152,7 @@ private:
     void _clearReceiveChunk();
 
     // Protects the state below
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // If there is an active moveChunk operation, this field contains the original request
     boost::optional<ActiveMoveChunkState> _activeMoveChunkState;

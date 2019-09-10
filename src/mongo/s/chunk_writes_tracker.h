@@ -89,7 +89,7 @@ private:
     /**
      * Protects _splitState when starting a split.
      */
-    stdx::mutex _mtx;
+    stdx::mutex _mtx{__FILE__, __LINE__};
 
     /**
      * Whether or not a current split is in progress for this chunk.

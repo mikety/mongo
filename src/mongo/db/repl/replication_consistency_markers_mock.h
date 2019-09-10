@@ -73,10 +73,10 @@ public:
     Status createInternalCollections(OperationContext* opCtx) override;
 
 private:
-    mutable stdx::mutex _initialSyncFlagMutex;
+    mutable stdx::mutex _initialSyncFlagMutex{__FILE__, __LINE__};
     bool _initialSyncFlag = false;
 
-    mutable stdx::mutex _minValidBoundariesMutex;
+    mutable stdx::mutex _minValidBoundariesMutex{__FILE__, __LINE__};
     OpTime _appliedThrough;
     OpTime _minValid;
     Timestamp _oplogTruncateAfterPoint;

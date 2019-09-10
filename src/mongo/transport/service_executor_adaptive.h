@@ -162,7 +162,7 @@ private:
 
     private:
         TickTimer _timer;
-        mutable stdx::mutex _mutex;
+        mutable stdx::mutex _mutex{__FILE__, __LINE__};
         TickSource::Tick _accumulator = 0;
         bool _running = false;
     };
@@ -210,7 +210,7 @@ private:
 
     std::unique_ptr<Options> _config;
 
-    mutable stdx::mutex _threadsMutex;
+    mutable stdx::mutex _threadsMutex{__FILE__, __LINE__};
     ThreadList _threads;
     std::array<int64_t, static_cast<size_t>(ThreadCreationReason::kMax)> _threadStartCounters;
 

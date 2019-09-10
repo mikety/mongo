@@ -104,7 +104,7 @@ private:
     using ReplicaSetMonitorsMap = StringMap<std::weak_ptr<ReplicaSetMonitor>>;
 
     // Protects access to the replica set monitors
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Executor for monitoring replica sets.
     std::unique_ptr<executor::TaskExecutor> _taskExecutor;

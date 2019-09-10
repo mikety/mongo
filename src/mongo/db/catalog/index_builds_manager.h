@@ -205,7 +205,7 @@ private:
     std::shared_ptr<MultiIndexBlock> _getBuilder(const UUID& buildUUID);
 
     // Protects the map data structures below.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Map of index builders by build UUID. Allows access to the builders so that actions can be
     // taken on and information passed to and from index builds.

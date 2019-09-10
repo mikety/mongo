@@ -293,7 +293,7 @@ protected:
     // rebind the handle from the owning thread. The thread that owns this DBClientConnection is
     // allowed to use the _session without locking the mutex. This mutex also guards writes to
     // _stayFailed, although reads are allowed outside the mutex.
-    stdx::mutex _sessionMutex;
+    stdx::mutex _sessionMutex{__FILE__, __LINE__};
     transport::SessionHandle _session;
     boost::optional<Milliseconds> _socketTimeout;
     transport::Session::TagMask _tagMask = transport::Session::kEmptyTagMask;

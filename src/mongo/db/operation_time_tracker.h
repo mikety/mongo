@@ -57,7 +57,7 @@ public:
 
 private:
     // protects _maxOperationTime
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
     LogicalTime _maxOperationTime;
 };
 

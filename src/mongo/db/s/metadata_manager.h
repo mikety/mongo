@@ -240,7 +240,7 @@ private:
     executor::TaskExecutor* const _executor;
 
     // Mutex to protect the state below
-    mutable stdx::mutex _managerLock;
+    mutable stdx::mutex _managerLock{__FILE__, __LINE__};
 
     // Contains a list of collection metadata for the same collection epoch, ordered in
     // chronological order based on the refreshes that occurred. The entry at _metadata.back() is

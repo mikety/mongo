@@ -260,7 +260,7 @@ private:
     stdx::unordered_map<NamespaceString, std::list<MigrationType>> _migrationRecoveryMap;
 
     // Protects the class state below.
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Always start the migration manager in a stopped state.
     State _state{State::kStopped};

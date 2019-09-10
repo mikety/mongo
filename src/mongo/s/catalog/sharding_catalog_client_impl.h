@@ -224,7 +224,7 @@ private:
     // (R) Read only, can only be written during initialization.
     //
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Distributed lock manager singleton.
     std::unique_ptr<DistLockManager> _distLockManager;  // (R)

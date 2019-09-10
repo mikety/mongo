@@ -193,7 +193,7 @@ public:
     }
 
 private:
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     Timestamp _stableTimestamp;
 

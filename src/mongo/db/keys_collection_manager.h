@@ -169,7 +169,7 @@ private:
                                 std::string threadName,
                                 Milliseconds refreshInterval);
 
-        stdx::mutex _mutex;  // protects all the member variables below.
+        stdx::mutex _mutex{__FILE__, __LINE__};  // protects all the member variables below.
         std::shared_ptr<Notification<void>> _refreshRequest;
         stdx::condition_variable _refreshNeededCV;
 

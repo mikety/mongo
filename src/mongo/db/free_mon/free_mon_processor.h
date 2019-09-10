@@ -265,7 +265,7 @@ public:
 
 private:
     // mutex to break count and cond var
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // cond var to signal and wait on
     stdx::condition_variable _condvar;

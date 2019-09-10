@@ -94,7 +94,7 @@ private:
     StatusWith<OID> _fetchClusterIdFromConfig(OperationContext* opCtx,
                                               const repl::ReadConcernLevel& readConcernLevel);
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
     stdx::condition_variable _inReloadCV;
 
     // Used to ensure that only one thread at a time attempts to reload the cluster ID from the

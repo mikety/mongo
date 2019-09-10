@@ -64,7 +64,7 @@ private:
     ThreadPool _threadPool;
 
     // Protects the class state below
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // True if shutDown was called.
     bool _inShutdown{false};

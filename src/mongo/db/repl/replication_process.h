@@ -103,7 +103,7 @@ private:
     // (M)  Reads and writes guarded by _mutex.
 
     // Guards access to member variables.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Used to access the storage layer.
     StorageInterface* const _storageInterface;  // (R)

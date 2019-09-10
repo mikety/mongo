@@ -239,7 +239,7 @@ private:
     CallbackFn _work;
 
     // Protects member data of this Fetcher.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     mutable stdx::condition_variable _condition;
 

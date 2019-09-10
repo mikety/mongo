@@ -62,7 +62,7 @@ public:
 private:
     void detachImpl() noexcept override;
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
     stdx::condition_variable _cv;
     bool _notified = false;
     bool _sleeping = false;

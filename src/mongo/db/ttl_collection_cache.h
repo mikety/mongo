@@ -52,7 +52,7 @@ public:
     std::vector<std::pair<UUID, std::string>> getTTLInfos();
 
 private:
-    stdx::mutex _ttlInfosLock;
+    stdx::mutex _ttlInfosLock{__FILE__, __LINE__};
     std::vector<std::pair<UUID, std::string>> _ttlInfos;  // <CollectionUUID, IndexName>
 };
 }  // namespace mongo

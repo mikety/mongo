@@ -102,7 +102,7 @@ private:
     void _addListener(Listener* listener);
     void _removeListener(Listener* listener);
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
     std::vector<Listener*> _listeners;
     stdx::unordered_map<Key, State> _replicaSetStates;
 };

@@ -346,7 +346,7 @@ private:
     AtomicWord<long long> _cappedSleepMS;
     CappedCallback* _cappedCallback;
     bool _shuttingDown;
-    mutable stdx::mutex _cappedCallbackMutex;  // guards _cappedCallback and _shuttingDown
+    mutable stdx::mutex _cappedCallbackMutex{__FILE__, __LINE__};  // guards _cappedCallback and _shuttingDown
 
     // See comment in ::cappedDeleteAsNeeded
     int _cappedDeleteCheckCount;

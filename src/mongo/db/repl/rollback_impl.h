@@ -449,7 +449,7 @@ private:
     void _resetDropPendingState(OperationContext* opCtx);
 
     // Guards access to member variables.
-    mutable stdx::mutex _mutex;  // (S)
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};  // (S)
 
     // Set to true when RollbackImpl should shut down.
     bool _inShutdown = false;  // (M)

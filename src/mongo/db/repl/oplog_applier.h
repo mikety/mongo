@@ -244,7 +244,7 @@ private:
     Observer* const _observer;
 
     // Protects member data of OplogApplier.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Set to true if shutdown() has been called.
     bool _inShutdown = false;

@@ -69,7 +69,7 @@ protected:
      */
     ServiceContext* _context() override;
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
     std::vector<PeriodicJobAnchor> _jobs;
 };
 

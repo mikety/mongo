@@ -55,7 +55,7 @@ private:
     inline static const auto _serviceDecoration =
         ServiceContext::declareDecoration<PeriodicThreadToAbortExpiredTransactions>();
 
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
     std::shared_ptr<PeriodicJobAnchor> _anchor;
 };
 

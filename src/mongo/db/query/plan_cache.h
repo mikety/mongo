@@ -549,7 +549,7 @@ private:
     LRUKeyValue<PlanCacheKey, PlanCacheEntry, PlanCacheKeyHasher> _cache;
 
     // Protects _cache.
-    mutable stdx::mutex _cacheMutex;
+    mutable stdx::mutex _cacheMutex{__FILE__, __LINE__};
 
     // Full namespace of collection.
     std::string _ns;

@@ -188,7 +188,7 @@ private:
     const Milliseconds _updatePositionTimeout;
 
     // Protects member data of this Reporter declared below.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     mutable stdx::condition_variable _condition;
 

@@ -129,7 +129,7 @@ private:
 
     WiredTigerRecordStore* _rs;
 
-    stdx::mutex _oplogReclaimMutex;
+    stdx::mutex _oplogReclaimMutex{__FILE__, __LINE__};
     stdx::condition_variable _oplogReclaimCv;
 
     // True if '_rs' has been destroyed, e.g. due to repairDatabase being called on the "local"
@@ -143,7 +143,7 @@ private:
     AtomicWord<long long> _currentRecords;  // Number of records in the stone being filled.
     AtomicWord<long long> _currentBytes;    // Number of bytes in the stone being filled.
 
-    mutable stdx::mutex _mutex;  // Protects against concurrent access to the deque of oplog stones.
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};  // Protects against concurrent access to the deque of oplog stones.
     std::deque<OplogStones::Stone> _stones;  // front = oldest, back = newest.
 };
 

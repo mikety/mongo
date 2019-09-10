@@ -92,6 +92,7 @@
 #include "mongo/s/sharding_uptime_reporter.h"
 #include "mongo/s/transaction_router.h"
 #include "mongo/s/version_mongos.h"
+#include "mongo/stdx/lock_actions.h"
 #include "mongo/stdx/thread.h"
 #include "mongo/transport/transport_layer_manager.h"
 #include "mongo/util/admin_access.h"
@@ -591,6 +592,7 @@ ExitCode runMongosServer(ServiceContext* serviceContext) {
         return EXIT_NET_ERROR;
     }
 
+    stdx::mutex::setLockActions(std::make_unique<LockActionsImpl>());
     serviceContext->notifyStartupComplete();
 
 #if !defined(_WIN32)

@@ -117,7 +117,7 @@ public:
     }
 
 private:
-    mutable stdx::mutex _hostToSecretsMutex;
+    mutable stdx::mutex _hostToSecretsMutex{__FILE__, __LINE__};
     HostToSecretsMap _hostToSecrets;
 };
 

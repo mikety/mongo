@@ -89,7 +89,7 @@ private:
     Status _refreshSessions(const LogicalSessionRecordSet& sessions);
     Status _removeRecords(const LogicalSessionIdSet& sessions);
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
     SessionMap _sessions;
 
     RefreshHook _refresh;

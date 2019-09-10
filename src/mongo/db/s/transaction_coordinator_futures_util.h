@@ -202,7 +202,7 @@ private:
     ChildIteratorsList::iterator _itToRemove;
 
     // Mutex to protect the shared state below
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // If shutdown() is called, this contains the first status that was passed to it and is an
     // indication that no more operations can be scheduled
@@ -286,7 +286,7 @@ Future<GlobalResult> collect(std::vector<Future<IndividualResult>>&& futures,
          * The first few fields have fixed values.           *
          ******************************************************/
         // Protects all state in the SharedBlock.
-        stdx::mutex mutex;
+        stdx::mutex mutex{__FILE__, __LINE__};
 
         // If any response returns an error prior to a response setting shouldStopIteration to
         // ShouldStopIteration::kYes, the promise will be set with that error rather than the global

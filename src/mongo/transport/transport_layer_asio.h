@@ -160,7 +160,7 @@ private:
     SSLParams::SSLModes _sslMode() const;
 #endif
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // There are three reactors that are used by TransportLayerASIO. The _ingressReactor contains
     // all the accepted sockets and all ingress networking activity. The _acceptorReactor contains

@@ -157,7 +157,7 @@ private:
 
     AtomicWord<long long> _sideWritesCounter{0};
 
-    mutable stdx::mutex _multikeyPathMutex;
+    mutable stdx::mutex _multikeyPathMutex{__FILE__, __LINE__};
     boost::optional<MultikeyPaths> _multikeyPaths;
 };
 

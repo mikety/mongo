@@ -192,7 +192,7 @@ private:
     AtomicWord<bool> _shardingInitialized{false};
 
     // Protects _configOpTime.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Last known highest opTime from the config server that should be used when doing reads.
     // This value is updated any time a shard or mongos talks to a config server or a shard.

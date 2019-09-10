@@ -236,7 +236,7 @@ private:
 
     // Protects member data of BackgroundSync.
     // Never hold the BackgroundSync mutex when trying to acquire the ReplicationCoordinator mutex.
-    mutable stdx::mutex _mutex;  // (S)
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};  // (S)
 
     OpTime _lastOpTimeFetched;  // (M)
 

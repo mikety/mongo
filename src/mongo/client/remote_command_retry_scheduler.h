@@ -157,7 +157,7 @@ private:
     Milliseconds _currentUsedMillis{0};
 
     // Protects member data of this scheduler declared after mutex.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     mutable stdx::condition_variable _condition;
 

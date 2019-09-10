@@ -72,7 +72,7 @@ private:
     AtomicWord<bool> _shouldRecord;
 
     // The mutex only protects the last recording shared_ptr
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
     std::shared_ptr<Recording> _recording;
 };
 

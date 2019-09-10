@@ -191,7 +191,7 @@ public:
 
 private:
     // Protects all the member variables.
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     GrabLockFunc _grabLockChecker;
     StatusWith<LocksType> _grabLockReturnValue;

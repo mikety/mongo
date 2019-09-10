@@ -74,7 +74,7 @@ private:
      */
     void _periodicallyWaitForMajority(ServiceContext* service);
 
-    stdx::mutex _mutex;
+    stdx::mutex _mutex{__FILE__, __LINE__};
 
     // Contains an ordered list of opTimes to wait to be majority comitted.
     OpTimeWaitingMap _queuedOpTimes;

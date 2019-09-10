@@ -152,7 +152,7 @@ private:
     /**
      * Protects data in query settings.
      */
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 };
 
 }  // namespace mongo

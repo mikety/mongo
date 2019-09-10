@@ -95,12 +95,12 @@ private:
     const WiredTigerSession _session;
     const bool _readOnly;
     // Guards _cursor. Acquire *before* _bufferMutex.
-    mutable stdx::mutex _cursorMutex;
+    mutable stdx::mutex _cursorMutex{__FILE__, __LINE__};
     WT_CURSOR* _cursor;  // pointer is const after constructor
 
     using Buffer = StringMap<std::shared_ptr<SizeInfo>>;
 
-    mutable stdx::mutex _bufferMutex;  // Guards _buffer
+    mutable stdx::mutex _bufferMutex{__FILE__, __LINE__};  // Guards _buffer
     Buffer _buffer;
 };
 }  // namespace mongo

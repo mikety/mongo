@@ -119,7 +119,7 @@ private:
     executor::TaskExecutor* const _executor;
 
     // Protects member data of this RollbackChecker.
-    mutable stdx::mutex _mutex;
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};
 
     // The sync source to check for rollbacks against.
     HostAndPort _syncSource;
