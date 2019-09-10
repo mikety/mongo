@@ -160,12 +160,12 @@ private:
         SharedData() = default;
 
         void setErrorStatus(Status status) {
-            stdx::lock_guard<stdx::mutex> lck(_statusMutex);
+            stdx::lock_guard<std::mutex> lck(_statusMutex);
             _status = std::move(status);
         }
 
         Status getErrorStatus() {
-            stdx::lock_guard<stdx::mutex> lck(_statusMutex);
+            stdx::lock_guard<std::mutex> lck(_statusMutex);
             return _status;
         }
 
@@ -179,7 +179,7 @@ private:
         std::string _stack;
 
     private:
-        stdx::mutex _statusMutex;
+        std::mutex _statusMutex;
         Status _status = Status::OK();
     };
 

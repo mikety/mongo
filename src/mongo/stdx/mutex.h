@@ -29,12 +29,24 @@
 
 #pragma once
 
+#include "mongo/base/error_codes.h"
+#include "mongo/base/string_data.h"
+#include "mongo/util/duration.h"
 #include <mutex>
+#include <string>
 
 namespace mongo {
+class LockActions {
+public:
+    virtual ~LockActions() = default;
+    virtual void onContendedLock(const StringData& name){};
+    virtual void onLockTraced(const std::string& text){};
+    virtual void onUnlockTraced(const std::string& text){};
+    virtual void onUnlock(){};
+};
+
 namespace stdx {
 
-using ::std::mutex;            // NOLINT
 using ::std::recursive_mutex;  // NOLINT
 using ::std::timed_mutex;      // NOLINT
 
@@ -48,6 +60,42 @@ using ::std::unique_lock;  // NOLINT
 constexpr adopt_lock_t adopt_lock{};
 constexpr defer_lock_t defer_lock{};
 constexpr try_to_lock_t try_to_lock{};
+
+class mutex {
+public:
+    mutex() : mutex("AnonymousMutex"_sd) {}
+    explicit mutex(const StringData& name);
+    mutex(const StringData&, unsigned int);
+
+    void lock();
+    void lock(const std::string& text);
+    void unlock();
+    void unlock(const std::string& text);
+    bool try_lock();
+    const StringData& getName() {
+        return _name;
+    }
+
+    static void setLockActions(std::unique_ptr<LockActions> actions);
+
+private:
+    bool _isTraced{false};
+    std::string _mutexId;
+    const StringData _name;
+    const Seconds _lockTimeout = Seconds(60);
+    static constexpr Milliseconds kContendedLockTimeout = Milliseconds(100);
+    ::std::timed_mutex _mutex;
+};
+
+class TracedLockGuard {
+public:
+    TracedLockGuard(mutex& m, const StringData&, unsigned int);
+    ~TracedLockGuard();
+
+private:
+    std::string _lockId;
+    stdx::lock_guard<mutex> _lock;
+};
 
 }  // namespace stdx
 }  // namespace mongo

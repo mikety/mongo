@@ -142,6 +142,8 @@ StringData LogComponent::toStringData() const {
             return "bridge"_sd;
         case kTracking:
             return "tracking"_sd;
+        case kTrackLock:
+            return "trackLock"_sd;
         case kTransaction:
             return "transaction"_sd;
         case kConnectionPool:
@@ -230,6 +232,8 @@ StringData LogComponent::getNameForLog() const {
             return "BRIDGE"_sd;
         case kTracking:
             return "TRACKING"_sd;
+        case kTrackLock:
+            return "TRACKLOCK"_sd;
         case kTransaction:
             return "TXN"_sd;
         case kConnectionPool:

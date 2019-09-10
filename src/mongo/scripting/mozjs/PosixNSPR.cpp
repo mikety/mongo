@@ -185,11 +185,11 @@ PRStatus PR_CallOnceWithArg(PRCallOnceType* once, PRCallOnceWithArgFN func, void
 }
 
 class nspr::Lock {
-    mongo::stdx::mutex mutex_;
+    ::std::mutex mutex_;
 
 public:
     Lock() {}
-    mongo::stdx::mutex& mutex() {
+    ::std::mutex& mutex() {
         return mutex_;
     }
 };
@@ -265,8 +265,8 @@ uint32_t PR_TicksPerSecond() {
 PRStatus PR_WaitCondVar(PRCondVar* cvar, uint32_t timeout) {
     if (timeout == PR_INTERVAL_NO_TIMEOUT) {
         try {
-            mongo::stdx::unique_lock<mongo::stdx::mutex> lk(cvar->lock()->mutex(),
-                                                            mongo::stdx::adopt_lock_t());
+            mongo::stdx::unique_lock<::std::mutex> lk(cvar->lock()->mutex(),
+                                                      mongo::stdx::adopt_lock_t());
 
             cvar->cond().wait(lk);
             lk.release();
@@ -277,8 +277,8 @@ PRStatus PR_WaitCondVar(PRCondVar* cvar, uint32_t timeout) {
         }
     } else {
         try {
-            mongo::stdx::unique_lock<mongo::stdx::mutex> lk(cvar->lock()->mutex(),
-                                                            mongo::stdx::adopt_lock_t());
+            mongo::stdx::unique_lock<::std::mutex> lk(cvar->lock()->mutex(),
+                                                      mongo::stdx::adopt_lock_t());
 
             cvar->cond().wait_for(lk, mongo::Microseconds(timeout).toSystemDuration());
             lk.release();

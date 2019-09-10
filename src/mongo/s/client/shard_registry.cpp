@@ -56,6 +56,7 @@
 #include "mongo/s/client/shard.h"
 #include "mongo/s/client/shard_factory.h"
 #include "mongo/s/grid.h"
+#include "mongo/stdx/lock_actions.h"
 #include "mongo/stdx/mutex.h"
 #include "mongo/util/concurrency/with_lock.h"
 #include "mongo/util/log.h"
@@ -88,7 +89,9 @@ const ShardId ShardRegistry::kConfigServerShardId = ShardId("config");
 
 ShardRegistry::ShardRegistry(std::unique_ptr<ShardFactory> shardFactory,
                              const ConnectionString& configServerCS)
-    : _shardFactory(std::move(shardFactory)), _initConfigServerCS(configServerCS) {}
+    : _shardFactory(std::move(shardFactory)), _initConfigServerCS(configServerCS) {
+    stdx::mutex::setLockActions(std::make_unique<LockActionsImpl>());
+}
 
 ShardRegistry::~ShardRegistry() {
     shutdown();
@@ -436,7 +439,8 @@ ShardRegistryData::ShardRegistryData(OperationContext* opCtx, ShardFactory* shar
 }
 
 void ShardRegistryData::swap(ShardRegistryData& other) {
-    stdx::lock_guard<stdx::mutex> lk(_mutex);
+    // stdx::lock_guard<stdx::mutex> lk(_mutex);
+    stdx::TracedLockGuard lk(_mutex, __FILE__, __LINE__);
     _lookup.swap(other._lookup);
     _rsLookup.swap(other._rsLookup);
     _hostLookup.swap(other._hostLookup);
@@ -444,7 +448,8 @@ void ShardRegistryData::swap(ShardRegistryData& other) {
 }
 
 shared_ptr<Shard> ShardRegistryData::getConfigShard() const {
-    stdx::lock_guard<stdx::mutex> lk(_mutex);
+    // stdx::lock_guard<stdx::mutex> lk(_mutex);
+    stdx::TracedLockGuard lk(_mutex, __FILE__, __LINE__);
     return _configShard;
 }
 

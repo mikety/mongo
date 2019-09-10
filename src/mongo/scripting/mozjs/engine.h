@@ -91,7 +91,7 @@ private:
     /**
      * This mutex protects _opToScopeMap
      */
-    stdx::mutex _globalInterruptLock;
+    std::mutex _globalInterruptLock;
 
     using OpIdToScopeMap = stdx::unordered_map<unsigned, MozJSImplScope*>;
     OpIdToScopeMap _opToScopeMap;  // map of mongo op ids to scopes (protected by

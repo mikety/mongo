@@ -150,6 +150,8 @@ baseEnv.Library(
         'util/timer.cpp',
         'util/uuid.cpp',
         'util/version.cpp',
+        'stdx/mutex_impl.cpp',
+        'stdx/lock_actions.cpp',
     ],
     # NOTE: This library *must not* depend on any libraries than
     # the ones declared here. Do not add to this list.

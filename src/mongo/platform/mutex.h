@@ -29,19 +29,22 @@
 
 #pragma once
 
+#include <mutex>
+
 #include "mongo/base/error_codes.h"
 #include "mongo/base/string_data.h"
-#include "mongo/stdx/mutex.h"
 #include "mongo/util/clock_source_mock.h"
 
 namespace mongo {
 
+/*
 class LockActions {
 public:
     virtual ~LockActions() = default;
     virtual void onContendedLock(const StringData& name) = 0;
     virtual void onUnlock() = 0;
 };
+*/
 
 class Mutex {
 public:
@@ -61,7 +64,7 @@ private:
     const StringData _name;
     const Seconds _lockTimeout = Seconds(60);
     static constexpr Milliseconds kContendedLockTimeout = Milliseconds(100);
-    stdx::timed_mutex _mutex;
+    std::timed_mutex _mutex;
 };
 
 }  // namespace mongo
