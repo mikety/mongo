@@ -79,7 +79,7 @@ public:
     LogSeverity nextFor(const KeyT& key) {
         auto now = Date_t::now();
 
-        stdx::lock_guard<stdx::mutex> lk(_mutex);
+        stdx::lock_guard<std::mutex> lk(_mutex);
         auto& cutoff = _cutoffByKey[key];
 
         if (now > cutoff) {
@@ -97,7 +97,7 @@ private:
     LogSeverity _limitedLogSeverity;
     LogSeverity _normalLogSeverity;
 
-    stdx::mutex _mutex;
+    std::mutex _mutex;
     stdx::unordered_map<KeyT, Date_t> _cutoffByKey;
 };
 

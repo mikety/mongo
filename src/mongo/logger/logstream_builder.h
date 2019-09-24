@@ -31,6 +31,7 @@
 
 #include <boost/optional.hpp>
 #include <memory>
+#include <mutex>
 #include <sstream>
 #include <string>
 

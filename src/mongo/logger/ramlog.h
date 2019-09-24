@@ -115,7 +115,7 @@ private:
 
     const char* getLine_inlock(unsigned lineNumber) const;
 
-    stdx::mutex _mutex;  // Guards all non-static data.
+    std::mutex _mutex;  // Guards all non-static data.
     char lines[N][C];
     unsigned h;  // current position
     unsigned n;  // number of lines stores 0 o N
@@ -166,7 +166,7 @@ public:
 
 private:
     const RamLog* _ramlog;
-    stdx::lock_guard<stdx::mutex> _lock;
+    std::lock_guard<std::mutex> _lock;
     unsigned _nextLineIndex;
 };
 

@@ -118,7 +118,7 @@ public:
         Status _openFileStream(bool append);
 
         RotatableFileWriter* _writer;
-        stdx::unique_lock<stdx::mutex> _lock;
+        stdx::unique_lock<std::mutex> _lock;
     };
 
     /**
@@ -128,7 +128,7 @@ public:
 
 private:
     friend class RotatableFileWriter::Use;
-    stdx::mutex _mutex;
+    std::mutex _mutex;
     std::string _fileName;
     std::unique_ptr<std::ostream> _stream;
 };

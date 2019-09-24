@@ -44,9 +44,8 @@ std::unique_ptr<LockActions> gLockActions;
 
 namespace stdx {
 
-mutex::mutex(const StringData& file, unsigned int line): _isTraced(true), _name("DebugMutex"_sd)
-{
-  _mutexId = file + ":" + std::to_string(line);
+mutex::mutex(const StringData& file, unsigned int line) : _isTraced(true), _name("DebugMutex"_sd) {
+    _mutexId = file + ":" + std::to_string(line);
 }
 
 mutex::mutex(const StringData& name) : _name(name) {}
@@ -54,7 +53,7 @@ mutex::mutex(const StringData& name) : _name(name) {}
 void mutex::lock() {
     if (_isTraced) {
         std::stringstream l;
-        l << "#LOCK_MUTEX#" << stdx::this_thread::get_id() << "#" << _mutexId << "#UNDEF"; 
+        l << "#LOCK_MUTEX#" << stdx::this_thread::get_id() << "#" << _mutexId << "#UNDEF";
         log() << l.str();
     }
     auto hasLock = _mutex.try_lock_for(kContendedLockTimeout.toSystemDuration());
@@ -70,7 +69,7 @@ void mutex::lock() {
 void mutex::unlock() {
     if (_isTraced) {
         std::stringstream l;
-        l << "#UNLOCK_MUTEX#" << stdx::this_thread::get_id() << "#" << _mutexId << "#UNDEF"; 
+        l << "#UNLOCK_MUTEX#" << stdx::this_thread::get_id() << "#" << _mutexId << "#UNDEF";
         log() << l.str();
     }
     _mutex.unlock();
@@ -79,7 +78,7 @@ void mutex::unlock() {
 void mutex::lock(const std::string& text) {
     if (_isTraced) {
         std::stringstream l;
-        l << "#LOCK_DETAILS#" << stdx::this_thread::get_id() << "#" << _mutexId << "#" << text; 
+        l << "#LOCK_DETAILS#" << stdx::this_thread::get_id() << "#" << _mutexId << "#" << text;
         log() << l.str();
     }
     auto hasLock = _mutex.try_lock_for(kContendedLockTimeout.toSystemDuration());
@@ -95,7 +94,7 @@ void mutex::lock(const std::string& text) {
 void mutex::unlock(const std::string& text) {
     if (_isTraced) {
         std::stringstream l;
-        l << "#UNLOCK_DETAILS#" << stdx::this_thread::get_id() << "#" << _mutexId << "#" << text; 
+        l << "#UNLOCK_DETAILS#" << stdx::this_thread::get_id() << "#" << _mutexId << "#" << text;
         log() << l.str();
     }
     _mutex.unlock();
@@ -109,19 +108,22 @@ void mutex::setLockActions(std::unique_ptr<LockActions> actions) {
     gLockActions = std::move(actions);
 }
 
-TracedLockGuard::TracedLockGuard(mutex& m, const StringData& file, unsigned int line):
-    _lock(m, std::adopt_lock_t())
-{
+TracedLockGuard::TracedLockGuard(mutex& m, const StringData& file, unsigned int line)
+    : _lock(m, std::adopt_lock_t()) {
     _lockId = file + ":" + std::to_string(line);
     std::stringstream l;
-    l << "#LOCK_GUARD#" << stdx::this_thread::get_id() << "#" << "UNDEF" << "#" << _lockId; 
+    l << "#LOCK_GUARD#" << stdx::this_thread::get_id() << "#"
+      << "UNDEF"
+      << "#" << _lockId;
     log() << l.str();
     m.lock(_lockId);
 }
 
 TracedLockGuard::~TracedLockGuard() {
     std::stringstream l;
-    l << "#UNLOCK_GUARD#" << stdx::this_thread::get_id() << "#" << "UNDEF" << "#" << _lockId; 
+    l << "#UNLOCK_GUARD#" << stdx::this_thread::get_id() << "#"
+      << "UNDEF"
+      << "#" << _lockId;
     log() << l.str();
 }
 

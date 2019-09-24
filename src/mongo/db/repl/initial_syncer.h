@@ -607,7 +607,7 @@ private:
     // (MX) Must hold _mutex and be in a callback in _exec to write; must either hold
     //      _mutex or be in a callback in _exec to read.
 
-    mutable stdx::mutex _mutex{__FILE__, __LINE__};                                                 // (S)
+    mutable stdx::mutex _mutex{__FILE__, __LINE__};                             // (S)
     const InitialSyncerOptions _opts;                                           // (R)
     std::unique_ptr<DataReplicatorExternalState> _dataReplicatorExternalState;  // (R)
     executor::TaskExecutor* _exec;                                              // (R)

@@ -317,7 +317,7 @@ private:
     AtomicWord<unsigned> _shuttingDown;
     static const uint32_t kShuttingDownMask = 1 << 31;
 
-    // MUTEX_TOO_NOISY 
+    // MUTEX_TOO_NOISY
     // stdx::mutex _cacheLock{__FILE__, __LINE__};
     stdx::mutex _cacheLock;
     typedef std::vector<WiredTigerSession*> SessionCache;
@@ -331,19 +331,19 @@ private:
 
     // Counter and critical section mutex for waitUntilDurable
     AtomicWord<unsigned> _lastSyncTime;
-    // MUTEX_TOO_NOISY 
+    // MUTEX_TOO_NOISY
     // stdx::mutex _lastSyncMutex{__FILE__, __LINE__};
     stdx::mutex _lastSyncMutex;
 
     // Mutex and cond var for waiting on prepare commit or abort.
-    // MUTEX_TOO_NOISY 
+    // MUTEX_TOO_NOISY
     // stdx::mutex _prepareCommittedOrAbortedMutex{__FILE__, __LINE__};
     stdx::mutex _prepareCommittedOrAbortedMutex;
     stdx::condition_variable _prepareCommittedOrAbortedCond;
     AtomicWord<std::uint64_t> _prepareCommitOrAbortCounter{0};
 
     // Protects _journalListener.
-    // MUTEX_TOO_NOISY 
+    // MUTEX_TOO_NOISY
     // stdx::mutex _journalListenerMutex{__FILE__, __LINE__};
     stdx::mutex _journalListenerMutex;
     // Notified when we commit to the journal.
