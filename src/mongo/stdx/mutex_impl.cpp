@@ -35,11 +35,13 @@
 #include "mongo/stdx/mutex.h"
 #include "mongo/stdx/thread.h"
 #include "mongo/util/log.h"
+#include "mongo/platform/atomic_word.h"
 
 namespace mongo {
 
 namespace {
 std::unique_ptr<LockActions> gLockActions;
+AtomicWord<unsigned> globalLineNum {0};
 }
 
 namespace stdx {
@@ -53,7 +55,8 @@ mutex::mutex(const StringData& name) : _name(name) {}
 void mutex::lock() {
     if (_isTraced) {
         std::stringstream l;
-        l << "#LOCK_MUTEX#" << stdx::this_thread::get_id() << "#" << _mutexId << "#UNDEF";
+        auto lineNum  = globalLineNum.fetchAndAdd(1);
+        l << "#LOCK_MUTEX#" << stdx::this_thread::get_id() << "#" << _mutexId << "#" << lineNum;
         log() << l.str();
     }
     auto hasLock = _mutex.try_lock_for(kContendedLockTimeout.toSystemDuration());
@@ -69,7 +72,8 @@ void mutex::lock() {
 void mutex::unlock() {
     if (_isTraced) {
         std::stringstream l;
-        l << "#UNLOCK_MUTEX#" << stdx::this_thread::get_id() << "#" << _mutexId << "#UNDEF";
+        auto lineNum  = globalLineNum.fetchAndAdd(1);
+        l << "#UNLOCK_MUTEX#" << stdx::this_thread::get_id() << "#" << _mutexId << "#" << lineNum;
         log() << l.str();
     }
     _mutex.unlock();
