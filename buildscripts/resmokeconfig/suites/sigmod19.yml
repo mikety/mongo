@@ -1,0 +1,22 @@
+test_kind: fsm_workload_test
+
+selector:
+  roots:
+  - jstests/concurrency/fsm_workloads/sigmod19_cc.js
+
+executor:
+  archive:
+    tests: true
+  config:
+    shell_options:
+      readMode: commands
+  hooks:
+    - class: CleanupConcurrencyWorkloads
+  fixture:
+    class: ReplicaSetFixture
+    mongod_options:
+      oplogSize: 1024
+      set_parameters:
+        enableTestCommands: 1
+        numInitialSyncAttempts: 1
+    num_nodes: 3 
